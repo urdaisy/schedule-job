@@ -1,16 +1,20 @@
 package com.schedule.job.admin.job;
 
+import com.schedule.job.admin.repository.JobLogRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.quartz.Job;
+import org.quartz.*;
 import org.quartz.JobExecutionContext;
-import org.quartz.JobExecutionException;
-import org.quartz.JobDataMap;
 
 /**
  * 定时任务抽象基类，统一处理日志、参数解析、异常封装
  */
 @Slf4j
 public abstract class BaseJob implements Job {
+    JobLogRepository jobLogRepository;
+    public BaseJob(JobLogRepository jobLogRepository) {
+        this.jobLogRepository = jobLogRepository;
+    }
+
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
         // 获取任务参数（JobDataMap）
@@ -38,4 +42,9 @@ public abstract class BaseJob implements Job {
      * @throws Exception 业务异常（会被上层捕获并封装为JobExecutionException）
      */
     protected abstract void executeInternal(String jobName, String jobParam) throws Exception;
+
+    /**
+     * 任务重试机制
+     */
+    protected abstract void scheduleRetryJob(Scheduler scheduler, String jobName, String jobGroup, int retryInterval) throws Exception;
 }

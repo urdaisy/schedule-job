@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分布式调度任务平台</title>
+    <!-- Element Plus CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f7fa;
+        }
+        .app-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .app-header {
+            background-color: #409eff;
+            color: white;
+            padding: 0 20px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .logo {
+            font-size: 20px;
+            font-weight: bold;
+            margin-right: 40px;
+        }
+        .header-menu {
+            display: flex;
+            gap: 20px;
+        }
+        .menu-item {
+            padding: 0 15px;
+            height: 60px;
+            line-height: 60px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            border-bottom: 2px solid transparent;
+        }
+        .menu-item:hover,
+        .menu-item.active {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-bottom-color: white;
+        }
+        .app-main {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .page-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .stat-card {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 28px;
+            margin-right: 20px;
+        }
+        .stat-info {
+            flex: 1;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #303133;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #909399;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .el-form-item__label {
+            cursor: pointer;
+        }
+        .el-select-dropdown__item {
+            height: 34px;
+            line-height: 34px;
+            padding: 0 20px;
+            white-space: nowrap;
+            overflow: visible;
+        }
+        .el-select-dropdown {
+            min-width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="app-container">
+            <div class="app-header">
+                <div class="logo">分布式调度任务平台</div>
+                <div class="header-menu">
+                    <div class="menu-item" :class="{active: currentPage === 'dashboard'}" @click="navigate('dashboard')">
+                        仪表盘
+                    </div>
+                    <div class="menu-item" :class="{active: currentPage === 'list'}" @click="navigate('list')">
+                        任务管理
+                    </div>
+                    <div class="menu-item" :class="{active: currentPage === 'log'}" @click="navigate('log')">
+                        日志管理
+                    </div>
+                </div>
+            </div>
+            <div class="app-main">
+                <!-- 仪表盘 -->
+                <div v-if="currentPage === 'dashboard'" class="page-container">
+                    <el-row :gutter="20">
+                        <el-col :span="6">
+                            <div class="stat-card">
+                                <div class="stat-icon" style="background-color: #409eff;">
+                                    <span style="font-size: 28px;">📋</span>
+                                </div>
+                                <div class="stat-info">
+                                    <div class="stat-value">{{ stats.total }}</div>
+                                    <div class="stat-label">任务总数</div>
+                                </div>
+                            </div>
+                        </el-col>
+                        <el-col :span="6">
+                            <div class="stat-card">
+                                <div class="stat-icon" style="background-color: #67c23a;">
+                                    <span style="font-size: 28px;">▶</span>
+                                </div>
+                                <div class="stat-info">
+                                    <div class="stat-value">{{ stats.running }}</div>
+                                    <div class="stat-label">运行中</div>
+                                </div>
+                            </div>
+                        </el-col>
+                        <el-col :span="6">
+                            <div class="stat-card">
+                                <div class="stat-icon" style="background-color: #e6a23c;">
+                                    <span style="font-size: 28px;">⏸</span>
+                                </div>
+                                <div class="stat-info">
+                                    <div class="stat-value">{{ stats.paused }}</div>
+                                    <div class="stat-label">已暂停</div>
+                                </div>
+                            </div>
+                        </el-col>
+                        <el-col :span="6">
+                            <div class="stat-card">
+                                <div class="stat-icon" style="background-color: #f56c6c;">
+                                    <span style="font-size: 28px;">⚠</span>
+                                </div>
+                                <div class="stat-info">
+                                    <div class="stat-value">{{ stats.failed }}</div>
+                                    <div class="stat-label">失败任务</div>
+                                </div>
+                            </div>
+                        </el-col>
+                    </el-row>
+                    <el-card style="margin-top: 20px;">
+                        <template #header>
+                            <div class="card-header">
+                                <span>最近任务</span>
+                                <el-button type="primary" @click="navigate('list')">查看全部</el-button>
+                            </div>
+                        </template>
+                        <el-table :data="recentJobs" style="width: 100%">
+                            <el-table-column prop="jobName" label="任务名称" width="200" />
+                            <el-table-column prop="jobGroup" label="任务组" width="150" />
+                            <el-table-column prop="cronExpression" label="Cron表达式" width="180" />
+                            <el-table-column prop="status" label="状态" width="100">
+                                <template #default="{ row }">
+                                    <el-tag :type="row.status === 1 ? 'success' : 'info'">
+                                        {{ row.status === 1 ? '运行中' : '已暂停' }}
+                                    </el-tag>
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="updateTime" label="更新时间" />
+                        </el-table>
+                    </el-card>
+                </div>
+
+                <!-- 任务列表 -->
+                <div v-if="currentPage === 'list'" class="page-container">
+                    <el-card>
+                        <template #header>
+                            <div class="card-header">
+                                <span>任务列表</span>
+                                <el-button type="primary" @click="showFormDialog('create')">
+                                    <span style="margin-right: 4px;">+</span>
+                                    创建任务
+                                </el-button>
+                            </div>
+                        </template>
+                        <el-table v-loading="loading" :data="jobList" style="width: 100%" stripe>
+                            <el-table-column prop="jobName" label="任务名称" width="200" />
+                            <el-table-column prop="jobGroup" label="任务组" width="150" />
+                            <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+                            <el-table-column prop="cronExpression" label="Cron表达式" width="180" />
+                            <el-table-column prop="status" label="状态" width="100">
+                                <template #default="{ row }">
+                                    <el-tag :type="row.status === 1 ? 'success' : 'info'">
+                                        {{ row.status === 1 ? '运行中' : '已暂停' }}
+                                    </el-tag>
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="updateTime" label="更新时间" width="180" />
+                            <el-table-column label="操作" width="300" fixed="right">
+                                <template #default="{ row }">
+                                    <el-button link type="primary" size="small" @click="showFormDialog('edit', row)">
+                                        编辑
+                                    </el-button>
+                                    <el-button link :type="row.status === 1 ? 'warning' : 'success'" size="small" 
+                                        @click="toggleStatus(row)">
+                                        {{ row.status === 1 ? '暂停' : '恢复' }}
+                                    </el-button>
+                                    <el-button link type="info" size="small" @click="runJobNow(row)">
+                                        立即执行
+                                    </el-button>
+                                    <el-button link type="danger" size="small" @click="deleteJob(row)">
+                                        删除
+                                    </el-button>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                    </el-card>
+                </div>
+
+                <!-- 日志列表 -->
+                <div v-if="currentPage === 'log'" class="page-container">
+                    <el-card>
+                        <template #header>
+                            <div class="card-header">
+                                <span>任务执行日志</span>
+                                <el-button type="primary" @click="loadLogList">
+                                    <span style="margin-right: 4px;">🔄</span>
+                                    刷新
+                                </el-button>
+                            </div>
+                        </template>
+                        <el-table v-loading="logLoading" :data="logList" style="width: 100%" stripe>
+                            <el-table-column prop="id" label="ID" width="80" />
+                            <el-table-column prop="jobId" label="任务ID" width="100" />
+                            <el-table-column prop="triggerTime" label="触发时间" width="180">
+                                <template #default="{ row }">
+                                    {{ formatDateTime(row.triggerTime) }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="executeTime" label="执行时间" width="180">
+                                <template #default="{ row }">
+                                    {{ formatDateTime(row.executeTime) }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="duration" label="耗时(ms)" width="120" />
+                            <el-table-column prop="status" label="状态" width="100">
+                                <template #default="{ row }">
+                                    <el-tag :type="row.status === 0 ? 'success' : 'danger'">
+                                        {{ row.status === 0 ? '成功' : '失败' }}
+                                    </el-tag>
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="errorMsg" label="错误信息" min-width="200" show-overflow-tooltip />
+                            <el-table-column prop="retryCount" label="重试次数" width="100" />
+                            <el-table-column prop="createTime" label="创建时间" width="180">
+                                <template #default="{ row }">
+                                    {{ formatDateTime(row.createTime) }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="操作" width="150" fixed="right">
+                                <template #default="{ row }">
+                                    <el-button link type="primary" size="small" @click="viewLogDetail(row)">
+                                        查看详情
+                                    </el-button>
+                                    <el-button link type="danger" size="small" @click="deleteLog(row)">
+                                        删除
+                                    </el-button>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                        <div style="margin-top: 20px; text-align: right;">
+                            <el-pagination
+                                v-model:current-page="logPageNum"
+                                v-model:page-size="logPageSize"
+                                :page-sizes="[10, 20, 50, 100]"
+                                :total="logTotal"
+                                layout="total, sizes, prev, pager, next, jumper"
+                                @size-change="handleLogSizeChange"
+                                @current-change="handleLogPageChange"
+                            />
+                        </div>
+                    </el-card>
+                </div>
+            </div>
+        </div>
+
+        <!-- 日志详情对话框 -->
+        <el-dialog v-model="logDetailVisible" title="日志详情" width="800px">
+            <el-descriptions :column="2" border>
+                <el-descriptions-item label="日志ID">{{ logDetail.id }}</el-descriptions-item>
+                <el-descriptions-item label="任务ID">{{ logDetail.jobId }}</el-descriptions-item>
+                <el-descriptions-item label="触发时间">{{ formatDateTime(logDetail.triggerTime) }}</el-descriptions-item>
+                <el-descriptions-item label="执行时间">{{ formatDateTime(logDetail.executeTime) }}</el-descriptions-item>
+                <el-descriptions-item label="耗时(ms)">{{ logDetail.duration }}</el-descriptions-item>
+                <el-descriptions-item label="状态">
+                    <el-tag :type="logDetail.status === 0 ? 'success' : 'danger'">
+                        {{ logDetail.status === 0 ? '成功' : '失败' }}
+                    </el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="重试次数">{{ logDetail.retryCount }}</el-descriptions-item>
+                <el-descriptions-item label="创建时间">{{ formatDateTime(logDetail.createTime) }}</el-descriptions-item>
+                <el-descriptions-item label="更新时间" :span="2">{{ formatDateTime(logDetail.updateTime) }}</el-descriptions-item>
+                <el-descriptions-item label="错误信息" :span="2">
+                    <el-text :type="logDetail.status === 0 ? 'info' : 'danger'">
+                        {{ logDetail.errorMsg || '无' }}
+                    </el-text>
+                </el-descriptions-item>
+            </el-descriptions>
+            <template #footer>
+                <el-button @click="logDetailVisible = false">关闭</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 任务表单对话框 -->
+        <el-dialog 
+            v-model="formDialogVisible" 
+            :title="formMode === 'create' ? '创建任务' : '编辑任务'" 
+            width="800px"
+            :append-to-body="true"
+            :close-on-click-modal="false">
+            <el-form ref="formRef" :model="form" :rules="formRules" label-width="120px" label-position="right">
+                <el-form-item label="任务名称" prop="jobName">
+                    <el-input 
+                        id="form-jobName"
+                        v-model="form.jobName" 
+                        placeholder="请输入任务名称" 
+                        :disabled="formMode === 'edit'" />
+                </el-form-item>
+                <el-form-item label="任务组" prop="jobGroup">
+                    <el-input 
+                        id="form-jobGroup"
+                        v-model="form.jobGroup" 
+                        placeholder="请输入任务组" 
+                        :disabled="formMode === 'edit'" />
+                </el-form-item>
+                <el-form-item label="任务描述" prop="description">
+                    <el-input 
+                        id="form-description"
+                        v-model="form.description" 
+                        type="textarea" 
+                        :rows="3" 
+                        placeholder="请输入任务描述" />
+                </el-form-item>
+                <el-form-item label="Cron表达式" prop="cronExpression">
+                    <el-input 
+                        id="form-cronExpression"
+                        v-model="form.cronExpression" 
+                        placeholder="例如: 0 0/5 * * * ? (每5分钟执行一次)" />
+                    <el-text type="info" size="small" style="display: block; margin-top: 5px;">
+                        常用表达式：0 0/5 * * * ? (每5分钟) | 0 0 0 * * ? (每天0点) | 0 0 12 * * ? (每天12点)
+                    </el-text>
+                </el-form-item>
+                <el-form-item label="任务类" prop="jobClassName">
+                    <el-select 
+                        id="form-jobClassName"
+                        v-model="form.jobClassName" 
+                        placeholder="请选择任务类" 
+                        style="width: 100%"
+                        popper-append-to-body
+                        :teleported="true">
+                        <el-option 
+                            v-for="option in jobClassOptions"
+                            :key="option.value"
+                            :label="option.label" 
+                            :value="option.value">
+                        </el-option>
+                    </el-select>
+                    <el-text type="info" size="small" style="display: block; margin-top: 5px;">
+                        选择任务执行类
+                    </el-text>
+                </el-form-item>
+                <el-form-item label="任务参数" prop="jobParam">
+                    <el-input 
+                        id="form-jobParam"
+                        v-model="form.jobParam" 
+                        type="textarea" 
+                        :rows="3" 
+                        placeholder="请输入任务参数（JSON格式，可选）" />
+                </el-form-item>
+                <el-form-item label="任务状态" prop="status">
+                    <el-radio-group id="form-status" v-model="form.status">
+                        <el-radio :label="1">运行中</el-radio>
+                        <el-radio :label="0">已暂停</el-radio>
+                    </el-radio-group>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="formDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="submitForm" :loading="submitting">
+                    {{ formMode === 'create' ? '创建' : '更新' }}
+                </el-button>
+            </template>
+        </el-dialog>
+    </div>
+
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Element Plus -->
+    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
+    <!-- Element Plus Icons -->
+    <script src="https://unpkg.com/@element-plus/icons-vue/dist/index.iife.js"></script>
+    <!-- Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+    <script>
+        const { createApp, ref, reactive, onMounted } = Vue;
+        const { ElMessage, ElMessageBox } = ElementPlus;
+        
+        // 图标组件已替换为简单符号，不再需要注册
+
+        // API 请求封装
+        const api = axios.create({
+            baseURL: '/api',
+            timeout: 10000
+        });
+
+        // 响应拦截器
+        api.interceptors.response.use(
+            response => {
+                const res = response.data;
+                if (res.code === 200) {
+                    // 如果 data 是 undefined，返回 null；否则返回 data（可能是数组、对象、字符串等）
+                    return res.data !== undefined ? res.data : (res.data === null ? null : []);
+                } else {
+                    ElMessage.error(res.message || '请求失败');
+                    return Promise.reject(new Error(res.message || '请求失败'));
+                }
+            },
+            error => {
+                // 只有在有响应数据时才显示错误消息，避免网络错误时重复提示
+                if (error.response && error.response.data) {
+                    const res = error.response.data;
+                    const message = res.message || res.error || '请求失败';
+                    // 只有非200状态码才显示错误消息
+                    if (res.code !== 200) {
+                        ElMessage.error(message);
+                    }
+                } else if (error.message && !error.message.includes('timeout')) {
+                    // 网络错误但不包括超时（超时已经在请求层面处理）
+                    ElMessage.error(error.message || '网络错误');
+                }
+                return Promise.reject(error);
+            }
+        );
+
+        // API 方法
+        const jobApi = {
+            getList: () => api.get('/job'),
+            create: (data) => api.post('/job', data),
+            update: (data) => api.put('/job', data),
+            delete: (jobName, jobGroup) => api.delete('/job', { params: { jobName, jobGroup } }),
+            pause: (jobName, jobGroup) => api.put('/job/pause', null, { params: { jobName, jobGroup } }),
+            resume: (jobName, jobGroup) => api.put('/job/resume', null, { params: { jobName, jobGroup } }),
+            runNow: (jobName, jobGroup) => api.post('/job/run', null, { params: { jobName, jobGroup } })
+        };
+
+        const logApi = {
+            getList: (pageNum, pageSize) => api.get('/log', { params: { pageNum, pageSize } }),
+            getById: (id) => api.get(`/log/${id}`),
+            delete: (id) => api.delete(`/log/${id}`)
+        };
+
+        const app = createApp({
+            setup() {
+                const currentPage = ref('dashboard');
+                const loading = ref(false);
+                const jobList = ref([]);
+                const recentJobs = ref([]);
+                const stats = reactive({
+                    total: 0,
+                    running: 0,
+                    paused: 0,
+                    failed: 0
+                });
+
+                // 日志相关
+                const logLoading = ref(false);
+                const logList = ref([]);
+                const logPageNum = ref(1);
+                const logPageSize = ref(10);
+                const logTotal = ref(0);
+                const logDetailVisible = ref(false);
+                const logDetail = reactive({
+                    id: null,
+                    jobId: null,
+                    triggerTime: null,
+                    executeTime: null,
+                    duration: null,
+                    status: null,
+                    errorMsg: null,
+                    retryCount: null,
+                    createTime: null,
+                    updateTime: null
+                });
+
+                // 表单相关
+                const formDialogVisible = ref(false);
+                const formMode = ref('create');
+                const submitting = ref(false);
+                const formRef = ref(null);
+                const form = reactive({
+                    id: null,
+                    jobName: '',
+                    jobGroup: '',
+                    description: '',
+                    cronExpression: '',
+                    jobClassName: 'com.schedule.job.admin.job.DefaultJob',
+                    jobParam: '',
+                    status: 1
+                });
+                
+                // 任务类选项列表
+                const jobClassOptions = [
+                    { label: '默认任务 (DefaultJob)', value: 'com.schedule.job.admin.job.DefaultJob' },
+                    { label: '数据处理任务 (DataProcessJob)', value: 'com.schedule.job.admin.job.DataProcessJob' },
+                    { label: '简单任务 (SimpleJob)', value: 'com.schedule.job.admin.job.SimpleJob' },
+                    { label: 'HTTP任务 (HttpJob)', value: 'com.schedule.job.admin.job.HttpJob' }
+                ];
+
+                const formRules = {
+                    jobName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
+                    jobGroup: [{ required: true, message: '请输入任务组', trigger: 'blur' }],
+                    cronExpression: [
+                        { required: true, message: '请输入Cron表达式', trigger: 'blur' }
+                    ],
+                    jobClassName: [
+                        { required: true, message: '请选择任务类', trigger: 'change' }
+                    ]
+                };
+
+                // 导航
+                const navigate = (page) => {
+                    currentPage.value = page;
+                    if (page === 'list') {
+                        loadJobList();
+                    } else if (page === 'dashboard') {
+                        loadDashboard();
+                    } else if (page === 'log') {
+                        loadLogList();
+                    }
+                };
+
+                // 加载任务列表
+                const loadJobList = async () => {
+                    loading.value = true;
+                    try {
+                        const jobs = await jobApi.getList();
+                        jobList.value = Array.isArray(jobs) ? jobs : [];
+                    } catch (error) {
+                        console.error('加载任务列表失败:', error);
+                        jobList.value = [];
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                // 加载仪表盘数据
+                const loadDashboard = async () => {
+                    try {
+                        const jobs = await jobApi.getList();
+                        // 确保 jobs 是数组
+                        const jobArray = Array.isArray(jobs) ? jobs : [];
+                        stats.total = jobArray.length;
+                        stats.running = jobArray.filter(job => job.status === 1).length;
+                        stats.paused = jobArray.filter(job => job.status === 0).length;
+                        stats.failed = 0;
+                        recentJobs.value = jobArray.slice(0, 5).map(job => ({
+                            ...job,
+                            updateTime: job.updateTime || '-'
+                        }));
+                    } catch (error) {
+                        // 错误已在拦截器中处理，这里不重复提示
+                        console.error('加载仪表盘数据失败:', error);
+                        // 初始化默认值
+                        stats.total = 0;
+                        stats.running = 0;
+                        stats.paused = 0;
+                        stats.failed = 0;
+                        recentJobs.value = [];
+                    }
+                };
+
+                // 显示表单对话框
+                const showFormDialog = (mode, row = null) => {
+                    formMode.value = mode;
+                    if (mode === 'create') {
+                        Object.assign(form, {
+                            id: null,
+                            jobName: '',
+                            jobGroup: '',
+                            description: '',
+                            cronExpression: '',
+                            jobClassName: 'com.schedule.job.admin.job.DefaultJob',
+                            jobParam: '',
+                            status: 1
+                        });
+                    } else {
+                        Object.assign(form, {
+                            id: row.id,
+                            jobName: row.jobName || '',
+                            jobGroup: row.jobGroup || '',
+                            description: row.description || '',
+                            cronExpression: row.cronExpression || '',
+                            jobClassName: row.jobClassName || 'com.schedule.job.admin.job.DefaultJob',
+                            jobParam: row.jobParam || '',
+                            status: row.status !== undefined ? row.status : 1
+                        });
+                    }
+                    formDialogVisible.value = true;
+                };
+
+                // 提交表单
+                const submitForm = async () => {
+                    if (!formRef.value) return;
+                    await formRef.value.validate(async (valid) => {
+                        if (valid) {
+                            submitting.value = true;
+                            try {
+                                // 确保 jobClassName 有值
+                                if (!form.jobClassName || form.jobClassName.trim() === '') {
+                                    form.jobClassName = 'com.schedule.job.admin.job.DefaultJob';
+                                }
+                                
+                                // 创建提交数据的副本，确保所有字段都被包含
+                                const submitData = {
+                                    jobName: form.jobName,
+                                    jobGroup: form.jobGroup,
+                                    description: form.description || '',
+                                    cronExpression: form.cronExpression,
+                                    jobClassName: form.jobClassName,
+                                    jobParam: form.jobParam || '',
+                                    status: form.status
+                                };
+                                
+                                // 如果是编辑模式，添加 id
+                                if (formMode.value === 'edit' && form.id) {
+                                    submitData.id = form.id;
+                                }
+                                
+                                if (formMode.value === 'create') {
+                                    await jobApi.create(submitData);
+                                    ElMessage.success('任务创建成功');
+                                } else {
+                                    await jobApi.update(submitData);
+                                    ElMessage.success('任务更新成功');
+                                }
+                                formDialogVisible.value = false;
+                                if (currentPage.value === 'list') {
+                                    await loadJobList();
+                                } else {
+                                    await loadDashboard();
+                                }
+                            } catch (error) {
+                                // 错误已在拦截器中处理
+                                console.error('提交表单失败:', error);
+                            } finally {
+                                submitting.value = false;
+                            }
+                        }
+                    });
+                };
+
+                // 切换状态
+                const toggleStatus = async (row) => {
+                    try {
+                        if (row.status === 1) {
+                            await jobApi.pause(row.jobName, row.jobGroup);
+                            ElMessage.success('任务已暂停');
+                        } else {
+                            await jobApi.resume(row.jobName, row.jobGroup);
+                            ElMessage.success('任务已恢复');
+                        }
+                        await loadJobList();
+                    } catch (error) {
+                        // 错误已在拦截器中处理
+                    }
+                };
+
+                // 立即执行
+                const runJobNow = async (row) => {
+                    try {
+                        await jobApi.runNow(row.jobName, row.jobGroup);
+                        ElMessage.success('任务已触发执行');
+                    } catch (error) {
+                        // 错误已在拦截器中处理
+                    }
+                };
+
+                // 删除任务
+                const deleteJob = async (row) => {
+                    try {
+                        await ElMessageBox.confirm(
+                            `确定要删除任务 "${row.jobName}" 吗？`,
+                            '确认删除',
+                            {
+                                confirmButtonText: '确定',
+                                cancelButtonText: '取消',
+                                type: 'warning'
+                            }
+                        );
+                        await jobApi.delete(row.jobName, row.jobGroup);
+                        ElMessage.success('删除成功');
+                        await loadJobList();
+                    } catch (error) {
+                        if (error !== 'cancel') {
+                            // 错误已在拦截器中处理
+                        }
+                    }
+                };
+
+                // 加载日志列表
+                const loadLogList = async () => {
+                    logLoading.value = true;
+                    try {
+                        const result = await logApi.getList(logPageNum.value, logPageSize.value);
+                        logList.value = result.list || [];
+                        logTotal.value = result.total || 0;
+                    } catch (error) {
+                        ElMessage.error('加载日志列表失败');
+                    } finally {
+                        logLoading.value = false;
+                    }
+                };
+
+                // 日志分页大小改变
+                const handleLogSizeChange = (size) => {
+                    logPageSize.value = size;
+                    logPageNum.value = 1;
+                    loadLogList();
+                };
+
+                // 日志页码改变
+                const handleLogPageChange = (page) => {
+                    logPageNum.value = page;
+                    loadLogList();
+                };
+
+                // 查看日志详情
+                const viewLogDetail = async (row) => {
+                    try {
+                        const detail = await logApi.getById(row.id);
+                        Object.assign(logDetail, detail);
+                        logDetailVisible.value = true;
+                    } catch (error) {
+                        ElMessage.error('加载日志详情失败');
+                    }
+                };
+
+                // 删除日志
+                const deleteLog = async (row) => {
+                    try {
+                        await ElMessageBox.confirm(
+                            `确定要删除这条日志吗？`,
+                            '确认删除',
+                            {
+                                confirmButtonText: '确定',
+                                cancelButtonText: '取消',
+                                type: 'warning'
+                            }
+                        );
+                        await logApi.delete(row.id);
+                        ElMessage.success('删除成功');
+                        await loadLogList();
+                    } catch (error) {
+                        if (error !== 'cancel') {
+                            // 错误已在拦截器中处理
+                        }
+                    }
+                };
+
+                // 格式化日期时间
+                const formatDateTime = (dateTime) => {
+                    if (!dateTime) return '-';
+                    if (typeof dateTime === 'string') {
+                        return dateTime;
+                    }
+                    // 如果是对象，尝试转换为字符串
+                    return dateTime.toString();
+                };
+
+                onMounted(() => {
+                    loadDashboard();
+
+                    setTimeout(() => {
+                        const formItems = document.querySelectorAll('.el-form-item');
+                        formItems.forEach((item, index) => {
+                            const label = item.querySelector('.el-form-item__label');
+                            const input = item.querySelector('input, textarea, .el-select__input, .el-radio-group');
+                            if (label && input) {
+                                const inputId = input.id || `form-input-${index}`;
+                                if (!input.id) {
+                                    input.id = inputId;
+                                }
+                                // 移除 label 的 for 属性，避免不匹配警告
+                                if (label.hasAttribute('for')) {
+                                    label.removeAttribute('for');
+                                }
+                            }
+                        });
+                    }, 100);
+                });
+
+                return {
+                    currentPage,
+                    loading,
+                    jobList,
+                    recentJobs,
+                    stats,
+                    formDialogVisible,
+                    formMode,
+                    submitting,
+                    formRef,
+                    form,
+                    formRules,
+                    jobClassOptions,
+                    navigate,
+                    loadJobList,
+                    showFormDialog,
+                    submitForm,
+                    toggleStatus,
+                    runJobNow,
+                    deleteJob,
+                    logLoading,
+                    logList,
+                    logPageNum,
+                    logPageSize,
+                    logTotal,
+                    logDetailVisible,
+                    logDetail,
+                    loadLogList,
+                    handleLogSizeChange,
+                    handleLogPageChange,
+                    viewLogDetail,
+                    deleteLog,
+                    formatDateTime
+                };
+            }
+        });
+        
+        app.use(ElementPlus).mount('#app');
+    </script>
+</body>
+</html>

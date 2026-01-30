@@ -18,8 +18,8 @@ import java.util.Optional;
 public class JobInfoRepository extends AbstractBaseRepository<JobInfoEntity, Long>{
     public Optional<JobInfo> findByJobNameAndJobGroup(String jobName, String jobGroup) {
         try {
-            StringBuilder sql = new StringBuilder("SELECT * FROM").append(this.tableName)
-                    .append("WHERE job_name = ? AND job_group = ?");
+            StringBuilder sql = new StringBuilder("SELECT * FROM ").append(this.tableName)
+                    .append(" WHERE job_name = ? AND job_group = ?");
             List<JobInfoEntity> jobInfoEntities = JdbcUtil.executeQuery(sql.toString(), this::mapResultSetToEntity, jobName, jobGroup);
             JobInfo jobInfo = jobInfoEntities.size() == 0 ? null : EntityConvert.convertToDomain(jobInfoEntities.get(0));
             return Optional.ofNullable(jobInfo);
@@ -39,13 +39,13 @@ public class JobInfoRepository extends AbstractBaseRepository<JobInfoEntity, Lon
     }
 
     public JobInfo findByJobGroup(String jobGroup) throws SQLException {
-        StringBuilder sql = new StringBuilder("SELECT * FROM").append(this.tableName).append(" WHERE job_group = ?");
+        StringBuilder sql = new StringBuilder("SELECT * FROM ").append(this.tableName).append(" WHERE job_group = ?");
         List<JobInfoEntity> jobInfos = JdbcUtil.executeQuery(sql.toString(), this::mapResultSetToEntity, jobGroup);
         return jobInfos.isEmpty() ? null : EntityConvert.convertToDomain(jobInfos.get(0));
     }
 
     public JobInfo findByJobName(String jobName) throws SQLException {
-        StringBuilder sql = new StringBuilder("SELECT * FROM").append(this.tableName).append(" WHERE job_name = ?");
+        StringBuilder sql = new StringBuilder("SELECT * FROM ").append(this.tableName).append(" WHERE job_name = ?");
         List<JobInfoEntity> jobInfos = JdbcUtil.executeQuery(sql.toString(), this::mapResultSetToEntity, jobName);
         return jobInfos.isEmpty() ? null : EntityConvert.convertToDomain(jobInfos.get(0));
     }
@@ -56,12 +56,12 @@ public class JobInfoRepository extends AbstractBaseRepository<JobInfoEntity, Lon
     }
 
     public int deleteByJobGroup(String jobGroup) throws SQLException {
-        StringBuilder sql = new StringBuilder("DELETE * FROM").append(this.tableName).append(" WHERE job_group = ?");
+        StringBuilder sql = new StringBuilder("DELETE * FROM ").append(this.tableName).append(" WHERE job_group = ?");
         List<JobInfoEntity> jobInfos = JdbcUtil.executeQuery(sql.toString(), this::mapResultSetToEntity, jobGroup);
         return jobInfos.size();
     }
     public int deleteByJobName(String jobName) throws SQLException {
-        StringBuilder sql = new StringBuilder("DELETE * FROM").append(this.tableName).append(" WHERE job_name = ?");
+        StringBuilder sql = new StringBuilder("DELETE * FROM ").append(this.tableName).append(" WHERE job_name = ?");
         List<JobInfoEntity> jobInfos = JdbcUtil.executeQuery(sql.toString(), this::mapResultSetToEntity, jobName);
         return jobInfos.size();
     }

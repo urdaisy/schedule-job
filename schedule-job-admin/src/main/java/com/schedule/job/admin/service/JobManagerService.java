@@ -1,6 +1,5 @@
 package com.schedule.job.admin.service;
 
-import com.schedule.job.admin.job.MyJob;
 import com.schedule.job.admin.job.JobInfo;
 import com.schedule.job.admin.repository.JobInfoRepository;
 import com.schedule.job.admin.redis.RedissonLockUtil;
@@ -18,6 +17,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+
+import static com.schedule.job.common.enums.BusinessExceptionCode.JOB_LOAD_FAILED;
 
 @Service
 @Slf4j
@@ -47,25 +48,31 @@ public class JobManagerService {
             if (existJob.isPresent()) {
                 throw new BusinessException(BusinessExceptionCode.JOB_INSERT_FAILED, "任务名+任务组已存在，无法重复创建");
             }
-            // 2. 保存任务信息到数据库
+            // 2. 设置默认任务类（如果未指定）
+            if (jobInfo.getJobClassName() == null || jobInfo.getJobClassName().trim().isEmpty()) {
+                jobInfo.setJobClassName("com.schedule.job.admin.job.DefaultJob");
+                log.info("未指定任务类，使用默认任务类：DefaultJob");
+            }
+            // 3. 保存任务信息到数据库
             jobInfo.setStartTime(LocalDateTime.now());
             jobInfo.setUpdateTime(LocalDateTime.now());
             JobInfo savedJobInfo = jobInfoRepository.saveByEntity(jobInfo);
 
-            // 3. 构建JobDetail
-            JobDetail jobDetail = JobBuilder.newJob(MyJob.class)
+            Class<? extends Job> clazz = getJobClass(jobInfo.getJobClassName());
+            // 4. 构建JobDetail
+            JobDetail jobDetail = JobBuilder.newJob(clazz)
                     .withIdentity(jobInfo.getJobName(), jobInfo.getJobGroup())
                     .withDescription(jobInfo.getDescription())
                     .storeDurably() // 无触发器时也保留任务
                     .build();
 
-            // 4. 设置任务参数
+            // 5. 设置任务参数
             JobDataMap jobDataMap = jobDetail.getJobDataMap();
             jobDataMap.put("jobName", jobInfo.getJobName());
             jobDataMap.put("jobParam", jobInfo.getJobParam());
             jobDataMap.put("jobId", jobInfo.getId());
 
-            // 5. 构建Cron触发器Trigger
+            // 6. 构建Cron触发器Trigger
             CronTrigger trigger = TriggerBuilder.newTrigger()
                     .withIdentity(jobInfo.getJobName() + "_trigger", jobInfo.getJobGroup())
                     .withSchedule(CronScheduleBuilder.cronSchedule(jobInfo.getCronExpression()))
@@ -73,7 +80,7 @@ public class JobManagerService {
                     .build();
 
             try {
-                // 6. 注册任务到调度器
+                // 7. 注册任务到调度器
                 scheduler.scheduleJob(jobDetail, trigger);
                 if (jobInfo.getStatus() == JobStatus.PAUSED.getCode()) {
                     pauseJob(jobInfo.getJobName(), jobInfo.getJobGroup());
@@ -131,6 +138,7 @@ public class JobManagerService {
             }
             // 基础校验逻辑
             JobInfo oldJob = jobInfoRepository.findByEntity(jobInfo.getId());
+            String oldJobClassName = oldJob.getJobClassName(); // 保存原有的jobClassName用于后续比较
             boolean isJobKeyChanged = !oldJob.getJobName().equals(jobInfo.getJobName()) || !oldJob.getJobGroup().equals(jobInfo.getJobGroup());
             if (isJobKeyChanged) {
                 Optional<JobInfo> existJob = jobInfoRepository.findByJobNameAndJobGroup(jobInfo.getJobName(), jobInfo.getJobGroup());
@@ -146,26 +154,46 @@ public class JobManagerService {
                     throw new BusinessException(BusinessExceptionCode.JOB_PARAM_FAILED, "Cron表达式不合法: " + jobInfo.getCronExpression());
                 }
             }
+            // 补全jobClassName（如果未指定或为空，使用原有值或默认值）
+            String jobClassName = jobInfo.getJobClassName();
+            if (jobClassName == null || jobClassName.trim().isEmpty()) {
+                jobClassName = oldJobClassName; // 保持原有值
+                if (jobClassName == null || jobClassName.trim().isEmpty()) {
+                    jobClassName = "com.schedule.job.admin.job.DefaultJob"; // 如果原有值也为空，使用默认值
+                    log.info("更新任务时未指定任务类，使用默认任务类：DefaultJob");
+                } else {
+                    log.info("更新任务时未指定任务类，保持原有任务类：{}", jobClassName);
+                }
+            }
             // 更新数据库字段
             oldJob.setJobName(jobInfo.getJobName());
             oldJob.setJobGroup(jobInfo.getJobGroup());
             oldJob.setDescription(jobInfo.getDescription());
             oldJob.setJobParam(jobInfo.getJobParam());
+            oldJob.setJobClassName(jobClassName);
+            oldJob.setCronExpression(jobInfo.getCronExpression());
             oldJob.setUpdateTime(LocalDateTime.now());
             JobInfo updatedJob = jobInfoRepository.saveByEntity(oldJob);
 
             try {
-                // 如果key(jobName和jobGroup)都有变化，则需要重新注册，不然，只跟心表达式即可
-                if (isJobKeyChanged) {
-                    scheduler.deleteJob(JobKey.jobKey(oldJob.getJobName(), oldJob.getJobGroup()));
-                    JobDetail newJobDetail =  JobBuilder.newJob(MyJob.class)
-                            .withIdentity(jobInfo.getJobName(), jobInfo.getJobGroup())
-                            .withDescription(jobInfo.getDescription())
+                // 如果key(jobName和jobGroup)都有变化，或者jobClassName有变化，则需要重新注册
+                boolean isJobClassNameChanged = !jobClassName.equals(oldJobClassName);
+                if (isJobKeyChanged || isJobClassNameChanged) {
+                    if (isJobKeyChanged) {
+                        scheduler.deleteJob(JobKey.jobKey(oldJob.getJobName(), oldJob.getJobGroup()));
+                    } else {
+                        // 如果只是jobClassName变化，需要删除旧任务并重新注册
+                        scheduler.deleteJob(JobKey.jobKey(updatedJob.getJobName(), updatedJob.getJobGroup()));
+                    }
+                    Class<? extends Job> clazz = getJobClass(jobClassName);
+                    JobDetail newJobDetail =  JobBuilder.newJob(clazz)
+                            .withIdentity(updatedJob.getJobName(), updatedJob.getJobGroup())
+                            .withDescription(updatedJob.getDescription())
                             .storeDurably() // 无触发器时也保留任务
                             .build();
                     CronTrigger newTrigger = TriggerBuilder.newTrigger()
-                            .withIdentity(jobInfo.getJobName() + "_trigger", jobInfo.getJobGroup())
-                            .withSchedule(CronScheduleBuilder.cronSchedule(jobInfo.getCronExpression()))
+                            .withIdentity(updatedJob.getJobName() + "_trigger", updatedJob.getJobGroup())
+                            .withSchedule(CronScheduleBuilder.cronSchedule(updatedJob.getCronExpression()))
                             .startNow()
                             .build();
                     scheduler.scheduleJob(newJobDetail, newTrigger);
@@ -256,5 +284,38 @@ public class JobManagerService {
      */
     public List<JobInfo> findAll() {
         return jobInfoRepository.findAllJobInfo();
+    }
+
+    /**
+     * 根据JobClass执行对应的定时任务
+     */
+    public Class<? extends Job> getJobClass(String jobClass) {
+        // 1. 参数校验
+        if (jobClass == null || jobClass.trim().isEmpty()) {
+            log.error("任务类全路径不能为空");
+            throw new BusinessException(JOB_LOAD_FAILED,"任务类全路径不能为空");
+        }
+        try {
+            // 2. 动态加载类
+            Class<?> clazz = Thread.currentThread().getContextClassLoader().loadClass(jobClass.trim());
+
+            // 3. 校验是否为Job的子类/实现类
+            if (!Job.class.isAssignableFrom(clazz)) {
+                log.error("类[{}]不是Job的子类，无法作为定时任务执行", jobClass);
+                throw new BusinessException(JOB_LOAD_FAILED, "类[" + jobClass + "]不是Job的子类，不支持作为定时任务");
+            }
+
+            // 4. 类型转换并返回
+            Class<? extends Job> jobClazz = clazz.asSubclass(Job.class);
+            log.info("成功加载定时任务类：{}", jobClass);
+            return jobClazz;
+
+        } catch (ClassNotFoundException e) {
+            log.error("未找到指定的任务类：{}", jobClass, e);
+            throw new BusinessException(JOB_LOAD_FAILED, "未找到指定的任务类：" + jobClass);
+        } catch (Exception e) {
+            log.error("加载任务类[{}]失败", jobClass, e);
+            throw new BusinessException(JOB_LOAD_FAILED, "加载任务类失败：" + jobClass);
+        }
     }
 }

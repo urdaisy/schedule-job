@@ -1,7 +1,6 @@
 package com.schedule.job.admin.orm;
 
-import jakarta.persistence.UniqueConstraint;
-
+import com.schedule.job.admin.orm.UniqueConstraint;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;

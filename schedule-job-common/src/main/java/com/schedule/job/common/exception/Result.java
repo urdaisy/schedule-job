@@ -41,7 +41,7 @@ public class Result<T> {
     }
 
     // 返回错误响应（自定义消息）
-    public static Result<Void> error(String message) {
+    public static <T> Result<T> error(String message) {
         return new Result<>(ResultCode.ERROR.getCode(), message, null);
     }
 

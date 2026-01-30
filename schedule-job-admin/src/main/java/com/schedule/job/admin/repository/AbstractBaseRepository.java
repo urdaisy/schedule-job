@@ -128,13 +128,28 @@ public abstract class AbstractBaseRepository<T, ID> implements BaseRepository<T,
     @Override
     public boolean save(T entity) {
         try {
-            StringBuilder sql = new StringBuilder("INSERT INTO").append(this.tableName).append("(");
-            StringBuilder value = new StringBuilder("VALUES").append("(");
+            // 检查实体是否有ID，如果有ID则执行更新，否则执行插入
+            Object id = getFieldValue(entity, idFieldName);
+            if (id != null) {
+                // 有ID，执行更新
+                return update(entity);
+            }
+            
+            // 没有ID，执行插入（排除自增ID字段）
+            StringBuilder sql = new StringBuilder("INSERT INTO ").append(this.tableName).append(" (");
+            StringBuilder value = new StringBuilder(" VALUES (");
             List<Object> params = new ArrayList<>();
             int count = 0;
             for (Map.Entry<String, String> entry : this.fieldToColumn.entrySet()) {
                 String fieldName = entry.getKey();
-                String columnName = entry.getKey();
+                // 修复：使用 entry.getValue() 获取列名，而不是 entry.getKey()
+                String columnName = entry.getValue();
+                
+                // 跳过ID字段（自增主键）
+                if (fieldName.equals(idFieldName)) {
+                    continue;
+                }
+                
                 Object fieldValue = getFieldValue(entity, fieldName);
                 if (count > 0) {
                     sql.append(",");
@@ -149,25 +164,26 @@ public abstract class AbstractBaseRepository<T, ID> implements BaseRepository<T,
             int rows = JdbcUtil.executeUpdate(sql.toString(), params.toArray());
             return rows > 0;
         } catch (Exception e) {
-            throw new RuntimeException("保存实体失败, 实体类：" + entityClass.getName() + "异常: " + e.getMessage());
+            throw new RuntimeException("保存实体失败, 实体类：" + entityClass.getName() + "异常: " + e.getMessage(), e);
         }
     }
 
     @Override
     public T findById(ID id) {
         try {
-            StringBuilder sql = new StringBuilder("SELECT * FROM").append(this.tableName).append(" WHERE id = ?");
+            StringBuilder sql = new StringBuilder("SELECT * FROM ").append(this.tableName)
+                    .append(" WHERE ").append(this.idColumnName).append(" = ?");
             List<T> result = JdbcUtil.executeQuery(sql.toString(), this::mapResultSetToEntity, id);
             return result.isEmpty() ? null : result.get(0);
         } catch (Exception e) {
-            throw new RuntimeException("查询实体失败, 实体id：" + id + "异常: " + e.getMessage());
+            throw new RuntimeException("查询实体失败, 实体id：" + id + "异常: " + e.getMessage(), e);
         }
     }
 
     @Override
     public List<T> findAll() {
         try {
-            StringBuilder sql = new StringBuilder("SELECT * FROM").append(this.tableName);
+            StringBuilder sql = new StringBuilder("SELECT * FROM ").append(this.tableName);
             return JdbcUtil.executeQuery(sql.toString(), this::mapResultSetToEntity);
         } catch (Exception e) {
             throw new RuntimeException("列表查询失败, 异常: " + e.getMessage());
@@ -181,7 +197,7 @@ public abstract class AbstractBaseRepository<T, ID> implements BaseRepository<T,
             if (id == null) {
                 throw new RuntimeException("更新失败：实体主键值为空");
             }
-            StringBuilder sql = new StringBuilder("UPDATE").append(this.tableName).append(" SET ");
+            StringBuilder sql = new StringBuilder("UPDATE ").append(this.tableName).append(" SET ");
             List<Object> params = new ArrayList<>();
             int count = 0;
             for (Map.Entry<String, String> entry: this.fieldToColumn.entrySet()) {
@@ -189,7 +205,7 @@ public abstract class AbstractBaseRepository<T, ID> implements BaseRepository<T,
                     continue;
                 }
                 String fieldName = entry.getKey();
-                String columnName = entry.getKey();
+                String columnName = entry.getValue();
                 Object fieldValue = getFieldValue(entity, fieldName);
                 if (count > 0) {
                     sql.append(",");
@@ -198,23 +214,24 @@ public abstract class AbstractBaseRepository<T, ID> implements BaseRepository<T,
                 count++;
                 params.add(fieldValue);
             }
-            sql.append(" WHERE id = ?");
+            sql.append(" WHERE ").append(idColumnName).append(" = ?");
             params.add(id);
             int row = JdbcUtil.executeUpdate(sql.toString(), params.toArray());
             return row > 0;
         } catch (Exception e) {
-            throw new RuntimeException("列表实体失败, 实体类：" + entityClass.getName() + "异常: " + e.getMessage());
+            throw new RuntimeException("更新实体失败, 实体类：" + entityClass.getName() + "异常: " + e.getMessage(), e);
         }
     }
 
     @Override
     public boolean deleteById(ID id) {
         try {
-            StringBuilder sql = new StringBuilder("DELETE FROM").append(this.tableName).append(" WHERE id = ?");
+            StringBuilder sql = new StringBuilder("DELETE FROM ").append(this.tableName)
+                    .append(" WHERE ").append(this.idColumnName).append(" = ?");
             int rows = JdbcUtil.executeUpdate(sql.toString(), id);
             return rows > 0;
         } catch (Exception e) {
-            throw new RuntimeException("列表删除失败, 实体id：" + id + "异常: " + e.getMessage());
+            throw new RuntimeException("删除实体失败, 实体id：" + id + "异常: " + e.getMessage(), e);
         }
     }
 }

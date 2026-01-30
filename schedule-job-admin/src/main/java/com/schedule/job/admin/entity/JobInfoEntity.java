@@ -2,6 +2,7 @@ package com.schedule.job.admin.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import com.schedule.job.admin.orm.UniqueConstraint;
 import com.schedule.job.admin.orm.Entity;
 import com.schedule.job.admin.orm.Id;
 import com.schedule.job.admin.orm.Column;

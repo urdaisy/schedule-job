@@ -15,18 +15,22 @@ import java.util.logging.Logger;
 public class CustomQuartzDataSource implements DataSource {
     @Override
     public Connection getConnection() throws SQLException{
-        // 确保JdbcClient.getConnection()不会返回null，且能正常获取连接
-        Connection connection = JdbcClient.getConnection();
+        Connection connection = QuartzJdbcClient.getConnection();
         if (connection == null) {
-            throw new SQLException("JdbcClient获取数据库连接失败，返回null");
+            throw new SQLException("QuartzJdbcClient获取数据库连接失败，返回null");
         }
-        log.debug("CustomQuartzDataSource获取数据库连接成功");
-        return connection;
+        log.debug("CustomQuartzDataSource获取数据库连接成功，包装为PooledConnection");
+        // 包装为PooledConnection，确保close()时归还到连接池而不是真正关闭
+        return new PooledConnection(connection, true);
     }
 
     @Override
     public Connection getConnection(String username, String password) throws SQLException {
-        return JdbcClient.getConnection();
+        Connection connection = QuartzJdbcClient.getConnection();
+        if (connection == null) {
+            throw new SQLException("QuartzJdbcClient获取数据库连接失败，返回null");
+        }
+        return new PooledConnection(connection, true);
     }
     @Override
     public PrintWriter getLogWriter() throws SQLException {

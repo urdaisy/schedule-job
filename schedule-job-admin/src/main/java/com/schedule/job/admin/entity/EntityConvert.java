@@ -1,6 +1,7 @@
 package com.schedule.job.admin.entity;
 
 import com.schedule.job.admin.job.JobInfo;
+import com.schedule.job.admin.job.JobLog;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,5 +51,57 @@ public class EntityConvert {
             jobInfos.add(convertToEntity(jobInfo));
         }
         return jobInfos;
+    }
+
+    public static JobLogEntity convertToLogEntity(JobLog jobLog) {
+        JobLogEntity jobLogEntity = new JobLogEntity();
+        jobLogEntity.setId(jobLog.getId());
+        jobLogEntity.setJobId(jobLog.getJobId());
+        jobLogEntity.setTriggerTime(jobLog.getTriggerTime());
+        jobLogEntity.setExecuteTime(jobLog.getExecuteTime());
+        jobLogEntity.setDuration(jobLog.getDuration());
+        jobLogEntity.setStatus(jobLog.getStatus());
+        jobLogEntity.setErrorMsg(jobLog.getErrorMsg());
+        jobLogEntity.setRetryCount(jobLog.getRetryCount());
+        jobLogEntity.setCreateTime(jobLog.getCreateTime());
+        jobLogEntity.setUpdateTime(jobLog.getUpdateTime());
+        jobLogEntity.setDeleted(jobLog.getDeleted());
+        return jobLogEntity;
+    }
+
+    public static JobLog convertToLogDomain(JobLogEntity jobLogEntity) {
+        JobLog jobLog = new JobLog();
+        jobLog.setId(jobLogEntity.getId());
+        jobLog.setJobId(jobLogEntity.getJobId());
+        jobLog.setTriggerTime(jobLogEntity.getTriggerTime());
+        jobLog.setExecuteTime(jobLogEntity.getExecuteTime());
+        jobLog.setDuration(jobLogEntity.getDuration());
+        jobLog.setStatus(jobLogEntity.getStatus());
+        jobLog.setErrorMsg(jobLogEntity.getErrorMsg());
+        jobLog.setRetryCount(jobLogEntity.getRetryCount());
+        jobLog.setCreateTime(jobLogEntity.getCreateTime());
+        jobLog.setUpdateTime(jobLogEntity.getUpdateTime());
+        jobLog.setDeleted(jobLogEntity.getDeleted());
+        return jobLog;
+    }
+
+    public static JobLog convertToLog(JobLogEntity jobLogEntity) {
+        return convertToLogDomain(jobLogEntity);
+    }
+
+    public static List<JobLog> convertToLogDomainList(List<JobLogEntity> jobLogEntityList) {
+        List<JobLog> jobLogs = new ArrayList<>();
+        for (JobLogEntity jobLogEntity : jobLogEntityList) {
+            jobLogs.add(convertToLogDomain(jobLogEntity));
+        }
+        return jobLogs;
+    }
+
+    public static List<JobLogEntity> convertToLogEntityList(List<JobLog> jobLogList) {
+        List<JobLogEntity> jobLogEntities = new ArrayList<>();
+        for (JobLog jobLog : jobLogList) {
+            jobLogEntities.add(convertToLogEntity(jobLog));
+        }
+        return jobLogEntities;
     }
 }

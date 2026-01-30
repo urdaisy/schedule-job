@@ -13,8 +13,13 @@ public enum BusinessExceptionCode {
     JOB_DELETE_FAILED(2000, "order delete failed"),
     JOB_UPDATE_FAILED(3000, "order update failed"),
     JOB_SEARCH_FAILED(4000, "order search failed"),
-    JOB_PAUSE_FAILED(5000, "order pause failed");
+    JOB_PAUSE_FAILED(5000, "order pause failed"),
+    // 任务重试失败
+    JOB_RETRY_FAILED(6000, "job retry failed"),
+    // 任务加载失败
+    JOB_LOAD_FAILED(7000, "job load failed"),
 
+    ;
     private int code;
     private String message;
 
