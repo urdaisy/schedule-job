@@ -68,23 +68,32 @@ public class JobManagerService {
 
             // 5. 设置任务参数
             JobDataMap jobDataMap = jobDetail.getJobDataMap();
-            jobDataMap.put("jobName", jobInfo.getJobName());
-            jobDataMap.put("jobParam", jobInfo.getJobParam());
-            jobDataMap.put("jobId", jobInfo.getId());
+            jobDataMap.put("jobName", savedJobInfo.getJobName());
+            jobDataMap.put("jobParam", savedJobInfo.getJobParam());
+            jobDataMap.put("jobId", savedJobInfo.getId()); // 使用保存后返回的对象，确保ID已设置
+            jobDataMap.put("jobGroup", savedJobInfo.getJobGroup());
+            // 设置重试相关参数
+            jobDataMap.put("currentRetryCount", 0); // 初始重试次数为0
+            if (savedJobInfo.getRetryCount() != null && savedJobInfo.getRetryCount() > 0) {
+                jobDataMap.put("maxRetryCount", savedJobInfo.getRetryCount());
+            } else {
+                jobDataMap.put("maxRetryCount", 3); // 默认最大重试3次
+            }
+            jobDataMap.put("retryInterval", 60); // 默认重试间隔60秒
 
             // 6. 构建Cron触发器Trigger
             CronTrigger trigger = TriggerBuilder.newTrigger()
-                    .withIdentity(jobInfo.getJobName() + "_trigger", jobInfo.getJobGroup())
-                    .withSchedule(CronScheduleBuilder.cronSchedule(jobInfo.getCronExpression()))
+                    .withIdentity(savedJobInfo.getJobName() + "_trigger", savedJobInfo.getJobGroup())
+                    .withSchedule(CronScheduleBuilder.cronSchedule(savedJobInfo.getCronExpression()))
                     .startNow()
                     .build();
 
             try {
                 // 7. 注册任务到调度器
                 scheduler.scheduleJob(jobDetail, trigger);
-                if (jobInfo.getStatus() == JobStatus.PAUSED.getCode()) {
-                    pauseJob(jobInfo.getJobName(), jobInfo.getJobGroup());
-                    log.info("任务已暂停: {}", jobInfo.getId());
+                if (savedJobInfo.getStatus() == JobStatus.PAUSED.getCode()) {
+                    pauseJob(savedJobInfo.getJobName(), savedJobInfo.getJobGroup());
+                    log.info("任务已暂停: {}", savedJobInfo.getId());
                 }
                 log.info("任务创建成功: jobId={}, jobName={}", savedJobInfo.getId(), savedJobInfo.getJobName());
             } catch (SchedulerException e) {
@@ -126,19 +135,42 @@ public class JobManagerService {
     }
 
     /**
+     * 标记任务为失败状态（达到最大重试次数后）
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void markJobAsFailed(String jobName, String jobGroup) throws SchedulerException {
+        JobInfo jobInfo = jobInfoRepository.findByJobNameAndJobGroup(jobName, jobGroup)
+                .orElseThrow(() -> new BusinessException(BusinessExceptionCode.JOB_NOT_FOUND));
+        jobInfo.setStatus(JobStatus.FAILED.getCode());
+        jobInfo.setUpdateTime(LocalDateTime.now());
+        jobInfoRepository.saveByEntity(jobInfo);
+        // 暂停Quartz任务，避免继续调度执行
+        scheduler.pauseJob(JobKey.jobKey(jobName, jobGroup));
+        log.info("任务已标记为失败状态: jobName={}, jobGroup={}", jobName, jobGroup);
+    }
+
+    /**
      * 更新任务
      */
     @Transactional(rollbackFor = Exception.class)
     public void updateJob(JobInfo jobInfo) throws BusinessException, SchedulerException{
         String redisKey = "job:update:" + jobInfo.getId();
+        boolean lockAcquired = false;
         try {
             // 分布式锁：防止并发更新
-            if (!redissonLockUtil.tryLock(redisKey, 5, 30, TimeUnit.SECONDS)) {
+            // waitTime: 等待获取锁的时间（5秒）
+            // leaseTime: 锁的持有时间（60秒，足够完成更新操作）
+            lockAcquired = redissonLockUtil.tryLock(redisKey, 5, 60, TimeUnit.SECONDS);
+            if (!lockAcquired) {
+                log.warn("获取任务更新锁失败，可能正在被其他线程更新：jobId={}", jobInfo.getId());
                 throw new BusinessException(BusinessExceptionCode.JOB_UPDATE_FAILED, "任务更新中，请稍后重试");
             }
             // 基础校验逻辑
             JobInfo oldJob = jobInfoRepository.findByEntity(jobInfo.getId());
             String oldJobClassName = oldJob.getJobClassName(); // 保存原有的jobClassName用于后续比较
+            // 保存原始的jobName和jobGroup，用于后续Quartz操作
+            String originalJobName = oldJob.getJobName();
+            String originalJobGroup = oldJob.getJobGroup();
             boolean isJobKeyChanged = !oldJob.getJobName().equals(jobInfo.getJobName()) || !oldJob.getJobGroup().equals(jobInfo.getJobGroup());
             if (isJobKeyChanged) {
                 Optional<JobInfo> existJob = jobInfoRepository.findByJobNameAndJobGroup(jobInfo.getJobName(), jobInfo.getJobGroup());
@@ -170,8 +202,8 @@ public class JobManagerService {
             oldJob.setJobGroup(jobInfo.getJobGroup());
             oldJob.setDescription(jobInfo.getDescription());
             oldJob.setJobParam(jobInfo.getJobParam());
-            oldJob.setJobClassName(jobClassName);
-            oldJob.setCronExpression(jobInfo.getCronExpression());
+            oldJob.setJobClassName(jobClassName); // 更新任务类
+            oldJob.setCronExpression(jobInfo.getCronExpression()); // 更新cron表达式
             oldJob.setUpdateTime(LocalDateTime.now());
             JobInfo updatedJob = jobInfoRepository.saveByEntity(oldJob);
 
@@ -191,6 +223,19 @@ public class JobManagerService {
                             .withDescription(updatedJob.getDescription())
                             .storeDurably() // 无触发器时也保留任务
                             .build();
+                    // 设置任务参数（包括重试配置）
+                    JobDataMap newJobDataMap = newJobDetail.getJobDataMap();
+                    newJobDataMap.put("jobName", updatedJob.getJobName());
+                    newJobDataMap.put("jobParam", updatedJob.getJobParam());
+                    newJobDataMap.put("jobId", updatedJob.getId());
+                    newJobDataMap.put("jobGroup", updatedJob.getJobGroup());
+                    newJobDataMap.put("currentRetryCount", 0);
+                    if (updatedJob.getRetryCount() != null && updatedJob.getRetryCount() > 0) {
+                        newJobDataMap.put("maxRetryCount", updatedJob.getRetryCount());
+                    } else {
+                        newJobDataMap.put("maxRetryCount", 3);
+                    }
+                    newJobDataMap.put("retryInterval", 60);
                     CronTrigger newTrigger = TriggerBuilder.newTrigger()
                             .withIdentity(updatedJob.getJobName() + "_trigger", updatedJob.getJobGroup())
                             .withSchedule(CronScheduleBuilder.cronSchedule(updatedJob.getCronExpression()))
@@ -203,7 +248,9 @@ public class JobManagerService {
                     }
                 } else {
                     // 更新cron表达式
-                    updateJobCron(oldJob.getJobName(), oldJob.getJobGroup(), jobInfo.getCronExpression());
+                    // 注意：如果jobName或jobGroup没有变化，使用原始的jobName和jobGroup来查找触发器
+                    // 因为Quartz中的触发器是用原始名称注册的
+                    updateJobCron(originalJobName, originalJobGroup, jobInfo.getCronExpression());
                 }
                 log.info("任务更新成功: jobId={}, newJobName={}", updatedJob.getId(), updatedJob.getJobName());
             } catch (SchedulerException e) {
@@ -211,7 +258,10 @@ public class JobManagerService {
                 throw e;
             }
         } finally {
-            redissonLockUtil.unlock(redisKey);
+            // 确保锁被释放（只有成功获取锁的情况下才释放）
+            if (lockAcquired) {
+                redissonLockUtil.unlock(redisKey);
+            }
         }
     }
 
@@ -223,7 +273,31 @@ public class JobManagerService {
         CronTrigger trigger = (CronTrigger) scheduler.getTrigger(triggerKey);
 
         if (trigger == null) {
-            throw new BusinessException(BusinessExceptionCode.JOB_TRIGGER_NOT_FOUND, "任务触发器不存在");
+            // 检查Job是否存在
+            JobKey jobKey = JobKey.jobKey(jobName, jobGroup);
+            if (!scheduler.checkExists(jobKey)) {
+                log.error("任务不存在，无法更新cron表达式: jobName={}, jobGroup={}", jobName, jobGroup);
+                throw new BusinessException(BusinessExceptionCode.JOB_NOT_FOUND, 
+                        "任务不存在，无法更新cron表达式。请先创建任务或检查任务名称和组名是否正确");
+            }
+            // Job存在但触发器不存在，可能是触发器被意外删除
+            log.warn("任务存在但触发器不存在，尝试重新创建触发器: jobName={}, jobGroup={}", jobName, jobGroup);
+            // 重新创建触发器
+            JobDetail jobDetail = scheduler.getJobDetail(jobKey);
+            if (jobDetail != null) {
+                CronTrigger newTrigger = TriggerBuilder.newTrigger()
+                        .withIdentity(triggerKey)
+                        .forJob(jobKey)
+                        .withSchedule(CronScheduleBuilder.cronSchedule(cronExpression))
+                        .startNow()
+                        .build();
+                scheduler.scheduleJob(newTrigger);
+                log.info("已重新创建触发器并更新cron表达式: jobName={}, cronExpression={}", jobName, cronExpression);
+                return;
+            }
+            throw new BusinessException(BusinessExceptionCode.JOB_TRIGGER_NOT_FOUND, 
+                    "任务触发器不存在。任务名称：" + jobName + "，任务组：" + jobGroup + 
+                    "。请检查任务是否正确创建，或联系管理员");
         }
 
         String oldCron = trigger.getCronExpression();
@@ -232,6 +306,8 @@ public class JobManagerService {
             trigger = trigger.getTriggerBuilder().withSchedule(scheduleBuilder).build();
             scheduler.rescheduleJob(triggerKey, trigger);
             log.info("任务cron更新成功: jobName={}, oldCron={}, newCron={}", jobName, oldCron, cronExpression);
+        } else {
+            log.debug("任务cron表达式未变化，无需更新: jobName={}, cronExpression={}", jobName, cronExpression);
         }
     }
 

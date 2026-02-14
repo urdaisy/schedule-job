@@ -1,11 +1,11 @@
 package com.schedule.job.admin.entity;
 
-import com.schedule.job.admin.orm.Column;
-import com.schedule.job.admin.orm.Entity;
-import com.schedule.job.admin.orm.Id;
+import com.schedule.job.common.infra.orm.Column;
+import com.schedule.job.common.infra.orm.Entity;
+import com.schedule.job.common.infra.orm.Id;
 
 
-import com.schedule.job.admin.orm.UniqueConstraint;
+import com.schedule.job.common.infra.orm.UniqueConstraint;
 import jakarta.persistence.PrePersist;
 
 import lombok.Data;

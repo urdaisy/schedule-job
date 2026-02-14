@@ -5,6 +5,7 @@ import com.schedule.job.admin.service.JobManagerService;
 import com.schedule.job.common.enums.ResultCode;
 import com.schedule.job.common.exception.BusinessException;
 import com.schedule.job.common.exception.Result;
+import com.schedule.job.security.annotation.RequirePermission;
 import io.micrometer.common.util.StringUtils;
 import jakarta.annotation.Resource;
 import org.quartz.SchedulerException;
@@ -24,6 +25,7 @@ public class JobController {
      * 创建任务
      */
     @PostMapping
+    @RequirePermission("job:create")
     public Result<String> addJob(@RequestBody JobInfo jobInfo) throws BusinessException, SchedulerException {
         // 先校验参数是否有误
         if (jobInfo == null || StringUtils.isEmpty(jobInfo.getJobName()) || StringUtils.isEmpty(jobInfo.getJobGroup())) {
@@ -37,6 +39,7 @@ public class JobController {
      * 暂停任务
      */
     @PutMapping("/pause")
+    @RequirePermission("job:update")
     public Result<String> pauseJob(@RequestParam String jobName, @RequestParam String jobGroup) throws BusinessException, SchedulerException {
         jobManagerService.pauseJob(jobName, jobGroup);
         return Result.success("任务暂停成功");
@@ -46,6 +49,7 @@ public class JobController {
      * 恢复任务
      */
     @PutMapping("/resume")
+    @RequirePermission("job:update")
     public Result<String> resumeJob(@RequestParam String jobName, @RequestParam String jobGroup) throws BusinessException, SchedulerException{
         jobManagerService.resumeJob(jobName, jobGroup);
         return Result.success("任务恢复成功");
@@ -55,6 +59,7 @@ public class JobController {
      * 更新任务
      */
     @PutMapping
+    @RequirePermission("job:update")
     public Result<String> updateJob(@RequestBody JobInfo jobInfo) throws SchedulerException {
         jobManagerService.updateJob(jobInfo);
         return Result.success("任务更新成功");
@@ -64,6 +69,7 @@ public class JobController {
      * 删除任务
      */
     @DeleteMapping
+    @RequirePermission("job:delete")
     public Result<String> deleteJob(@RequestParam String jobName, @RequestParam String jobGroup) throws SchedulerException {
         jobManagerService.deleteJob(jobName, jobGroup);
         return Result.success("任务删除成功");
@@ -73,6 +79,7 @@ public class JobController {
      * 立即执行任务
      */
     @PostMapping("/run")
+    @RequirePermission("job:execute")
     public Result<String> runJobNow(@RequestParam String jobName, @RequestParam String jobGroup) throws SchedulerException {
         jobManagerService.runJobNow(jobName, jobGroup);
         return Result.success("任务已触发执行");
@@ -82,6 +89,7 @@ public class JobController {
      * 查询任务列表
      */
     @GetMapping
+    @RequirePermission("job:query")
     public Result<List<JobInfo>> getJobList() {
         return Result.success(jobManagerService.findAll());
     }

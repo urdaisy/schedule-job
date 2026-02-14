@@ -24,6 +24,111 @@
 - 用户登录：简单账号密码登录（默认管理员账号，支持修改密码）
 - 权限控制：基础角色（管理员/普通用户），普通用户仅可查看/触发任务，管理员全权限
 
+## 项目预览
+### 功能1：定时任务可视化
+<img src="doc/image/job_dashboard.png" width="500" alt="主页面">
+
+### 功能2：权限控制流程
+<img src="doc/image/user_login.png" width="500" alt="用户登录">
+<img src="doc/image/user_registry.png" width="500" alt="用户注册">
+<img src="doc/image/user_management.png" width="500" alt="管理用户">
+<img src="doc/image/admin_create_user.png" width="500" alt="创建用户">
+
+### 功能3: 定时任务CRUD
+<img src="doc/image/job_management.png" width="500" alt="任务管理">
+<img src="doc/image/create_job.png" width="500" alt="任务管理">
+
+### 功能4: 日志管理
+<img src="doc/image/joblog_management.png" width="500" alt="任务日志记录">
+
+### 功能5: 基础告警功能
+<img src="doc/image/alarm_config.png" width="500" alt="告警配置">
+<img src="doc/image/alarm_record.png" width="500" alt="告警记录">
+
+## Release 2026.2.14 功能说明
+**完成权限控制和告警功能实现**
+
+一、权限控制 <br>
+目标：保证安全性<br>
+分为两类：<br>
+a. 基于角色的访问控制(RBAC)：谁(User)拥有什么样的角色(Role)拥有哪些权限(Permission)<br>
+b. 基于属性的访问控制(ABAC)：该模型常见于分布式云系统中，属性可扩展为资源/机器/Region，即以物的属性做权限区分，而不是单指基于人的属性（角色）区分控制权限，ABAC是RBAC模型的扩展。<br>
+数据库表设计 <br>
+五张表：用户表User，角色表Role，权限表Permission，用户角色关系表User-Role，角色权限关系表RolePermission表，符合数据库设计的单一原则。<br>
+数据库表设计思路：<br>
+（1）sys_job_user、sys_job_role和sys_job_permission表中都使用了id作为主键，但是唯一约束是不用的，<br>
+确定唯一约束的核心逻辑是： 识别业务上 天然不允许重复的标识信息。<br>
+例如sys_job_user中username用户名（登录标识）必须唯一，sys_job_role中角色编号必须唯一、sys_job_permission中权限编号必须唯一<br>
+（2）sys_job_user_role和sys_job_role_permission表使用InnoDB存储引擎的B树做联合索引<br>
+（3）sys_job_alert_config和sys_job_alert_record表中，索引可以有多个。索引设计的核心是匹配查询频率和场景，在告警记录中可以通过任务id检索、也可以用任务执行日志id检索。<br>
+（4）sys_job_permission和sys_job_role_permission使用inner join内连接，实现连表查询。<br>
+内连接/左连接/右连接语法：selete table1.* from table1 inner/left/right join table2 on table1.id = table2.id where id = ?<br>
+二、认证功能<br>
+1、加密算法：BCrypt基于 Blowfish 加密算法改造的自适应哈希算法，生成加密后密码：先生成salt再hash。<br>
+在选择jar的时候，考虑到springboot-security说存在CVE安全问题，本项目使用的是org.mindrot.bcrypt.<br>
+相关链接：https://www.herodevs.com/vulnerability-directory/cve-2025-22234
+2、token认证：TokenHandlerInterceptor实现springboot HandlerInterceptor接口，重写preHandler()。<br>
+在 Spring MVC 中，Handler 指处理 HTTP 请求的处理器，通常是 Controller 方法。因此Handler = Controller 方法（处理请求的业务逻辑），HandlerInterceptor = 拦截 HTTP 请求的拦截器（框架层面）。<br>
+命名原则：实现什么接口，就叫什么名字。<br>
+在本项目中Token验证拦截器命名为；TokenHandlerInterceptor<br>
+重写preHandler()：在进行基础校验后，查询sys_job_user_session表判断当前token是否过期，确保用户登录会话的有效性。<br>
+【核心思路】在本项目认证+鉴权的层次设计中：<br>
+Http Request -> TokenHandlerInceptor（实现springboot HandlerInterceptor接口，重写preHandler方法）实现token校验、验证token是否过期、将用户信息存入request -> Controller控制器加上自定义注解@RequirePermission("job:create")，通过解析注解验证用户权限，无权限则退出访问 ->执行业务逻辑<br>
+三、授权功能<br>
+参考apache shiro 手写AOP实现授权功能，自定义注解 @RequirePermission("job:create")，通过拦截器/过滤器实现权限校验。<br>
+（1）自定义注解PointCut/Aspect/Around/Before/After/RequirePermission，实现解析PointCut切点接口PointcutMatcher和PointcutMatcherImpl，<br>
+参考官方实现：org.aspectj.weaver.tools下PointcutParser。<br>
+核心思路：正则表达式匹配原则，解析PointCut切点注解标柱的：返回值 包名 类名（返回值），将其保存ExecutionPointcutNode切点表达式<br>
+（2）将拦截器拦截的方法转换为切面的方法调用。采用工厂模式，使用代理工厂，根据目标类是否有接口决定JDK动态代理/CGLIB动态代理。<br>
+其中，InvocationHandler是JDK 动态代理处理器，使用 method.invoke(target, args)（反射调用目标对象）；<br>
+而MethodInterceptor是CGLIB 拦截器，使用 methodProxy.invokeSuper(proxy, args)（调用代理对象的父类方法）<br>
+参考官方实现：org.springframework.aop.framework下ProxyFactory<br>
+JDK和CGLIB动态代理的实现参考官方实现：org.springframework.aop.framework CglibAopProxy<br>
+（3）切面扫描和解析：扫面项目文件下的所有被Aspect注解标注的类，解析切点、切点表达式和通知，全部保存到切面实例中，最后将切面实例保存到Spring上下文，交由Spring代管。<br>
+（4）通过Spring BeanPostProcessor在Bean初始化后找到切面中被切点表达式标记的bean，该bean为目标方法，通过反射调用时会优先正常的方法先执行目标bean。<br>
+（5）创建代理对象，执行切面的鉴权方法AuthService.checkPermission()<br>
+（6）鉴权完毕后执行定时任务 CRUD<br>
+【业务流程】<br>
+1、用户前端请求 → TokenHandlerInterceptor 验证 Token，将 userId 存入 request<br>
+2、Controller 方法 → 被 PermissionAspect 拦截<br>
+3、权限验证 → 从 request 获取 userId，调用 AuthService.checkPermission() 验证<br>
+4、验证通过 → 执行目标方法<br>
+5、验证失败 → 抛出 BusinessException，返回无权限错误<br>
+四、告警功能<br>
+实现任务执行失败时及时通知，新增AlertService.sendAlert(JobLog log)接口，功能点：在任务失败时触发告警、同一任务短时间内多次失败，只发送一次告警<br>
+
+**编码过程总结**
+
+1、编译报错引入注解依赖：<br>
+ava: Annotation processing is not supported for module cycles. Please ensure that all modules from cycle [schedule-job-admin,schedule-job-common] are excluded from annotation processing
+解决方案：使用Module->Analyze dependencies->Analyze，找到依赖后并解决后，点击Sync Maven Project，重新加载Maven，再编译运行。
+参考链接：https://stackoverflow.com/questions/27223917/how-to-configure-annotations-processing-in-intellij-idea-14-for-current-project
+2、HttpMediaTypeNotAcceptableException报错：<br>
+封装的统一响应体没有get属性，导致spring无法识别正确的响应体体格式<br>
+参考链接：https://stackoverflow.com/questions/28466207/could-not-find-acceptable-representation-using-spring-boot-starter-web<br>
+3、注册用户时创建角色列表失败：<br>
+401 (Unauthorized)，接口被 TokenHandlerInterceptor 拦截，需要 token 验证，但注册页面访问时用户尚未登录，没有 token。<br>
+修复：在 WebMvcConfig 中将 /api/login/register/roles 加入拦截器排除列表，使其无需 token 验证。<br>
+
+参考文档：<br>
+1、https://www.cnblogs.com/-tang/p/13220418.html
+2、https://konnase.github.io/2017/11/25/java_spring/sinosteel-RequiresPermissions%E6%B3%A8%E8%A7%A3%E5%AE%9E%E7%8E%B0%E6%B5%81%E7%A8%8B/
+3、shiro官方文档：https://github.com/apache/shiro/blob/main/core/src/main/java/org/apache/shiro/authz/annotation/RequiresPermissions.java
+
+## Release 2026.2.4 功能说明
+**修复已知问题**
+1. Quartz 通过反射创建实例，无法使用 Spring 依赖注入 JobLogRepository，任务执行时 jobLogRepository 为 null，导致日志无法保存。<br>
+   修改方案：创建ApplicationContextHolder.java，延迟初始化，在定时任务执行时execute方法中通过 ApplicationContext 获取Bean-JobLogRepository <br>
+2. 由于AbstractBaseRepository.save() 执行 INSERT 后，未获取数据库生成的自增ID并回填到实体。 因此在convertToDomain中jobInfoEntity.getId() 仍为 null，导致后续查询失败。<br>
+   修改方案：
+   在AbstractBaseRepository.save() 执行 INSERT时，根据主键注解判断两种处理方式：（1）实体存在主键id，那么JdbcUtil.java中增加插入并返回主键id的方法executeInsertAndGetId，<br>
+   在PreparedStatement使用 RETURN_GENERATED_KEYS 标志，pstmt执行后能够调用getGeneratedKeys()方法返回主键Id，将主键id设置回实体。（2）实体不存在主键id，使用普通更新方法<br>
+3. 修复Redis连接池泄漏问题：1）每次调用tryLock都创建新的 RedissonClient，导致资源浪费和连接泄漏 <br>（2）释放锁时，重复添加锁前缀，根据重复锁前缀找不到对应的锁对象<br>
+   总结：redis锁工具类核心只有两个方法：获取锁tryLock和释放锁unlock，根据最长等待时间waitTime和锁持有时间leaseTime加锁，释放锁要有当前持有锁的线程释放<br>
+4. 日志查询失败：数据库的 bigint(20) 类型在 JDBC 驱动返回时，部分场景下会被解析为 BigInteger 而非 Long，而 Java 实体类的 duration 字段定义为 Long 类型，<br>
+   直接赋值就会出现类型不匹配的错误。修复在保存任务执行日志saveJobLog时，约束执行错误信息长度，避免过长溢出。<br>
+   修改为：实现TypeConvertorUtil类型转换工具类，mapResultSetToEntity时根据目标实体的类型转换类型<br>
+
 ## Release 2026.1.31 功能说明
 **完善任务管理机制，实现日志可追溯和可视化前端页面**
 基本功能如下：<br>

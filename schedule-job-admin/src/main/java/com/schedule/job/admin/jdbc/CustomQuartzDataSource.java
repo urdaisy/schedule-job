@@ -30,6 +30,7 @@ public class CustomQuartzDataSource implements DataSource {
         if (connection == null) {
             throw new SQLException("QuartzJdbcClient获取数据库连接失败，返回null");
         }
+        // 包装为PooledConnection，确保close()时归还到连接池而不是真正关闭
         return new PooledConnection(connection, true);
     }
     @Override

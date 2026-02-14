@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/schedule-job.iml" filepath="$PROJECT_DIR$/schedule-job.iml" />
+      <module fileurl="file://$PROJECT_DIR$/schedule-job-common/schedule-job-common.iml" filepath="$PROJECT_DIR$/schedule-job-common/schedule-job-common.iml" />
+      <module fileurl="file://$PROJECT_DIR$/schedule-job-admin/schedule-job-admin.iml" filepath="$PROJECT_DIR$/schedule-job-admin/schedule-job-admin.iml" />
+      <module fileurl="file://$PROJECT_DIR$/schedule-job-ai/schedule-job-ai.iml" filepath="$PROJECT_DIR$/schedule-job-ai/schedule-job-ai.iml" />
+    </modules>
+  </component>
+</project>

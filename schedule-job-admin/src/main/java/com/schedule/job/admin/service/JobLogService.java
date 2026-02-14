@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.sql.SQLException;
+import java.util.Date;
+import java.util.List;
 
 @Service
 public class JobLogService {
@@ -33,6 +35,29 @@ public class JobLogService {
     }
 
     /**
+     * 根据任务状态查询日志
+     *
+     */
+    public JobLog findByJobIdAndStatus(Long jobId, Integer status) throws SQLException {
+        JobLogEntity jobLogEntity = jobLogRepository.findById(jobId);
+        if (jobLogEntity == null || jobLogEntity.getDeleted() == 1) {
+            return null;
+        }
+        return com.schedule.job.admin.entity.EntityConvert.convertToLogDomain(jobLogEntity);
+    }
+
+    /**
+     * 查询任务关联日志
+     */
+    public List<JobLog> findByJobId(Long jobId) throws SQLException {
+        List<JobLog> jobLog = jobLogRepository.queryJobLogByJobId(jobId);
+        if (jobLog == null) {
+            return null;
+        }
+        return jobLog;
+    }
+
+    /**
      * 根据ID删除日志（逻辑删除）
      *
      * @param id 日志ID
@@ -40,5 +65,12 @@ public class JobLogService {
      */
     public boolean deleteById(Long id) throws SQLException {
         return jobLogRepository.deleteJobLog(id);
+    }
+
+    /**
+     * 按照时间查询日志
+     */
+    public boolean queryByDate(Date data) throws SQLException {
+        return true;
     }
 }

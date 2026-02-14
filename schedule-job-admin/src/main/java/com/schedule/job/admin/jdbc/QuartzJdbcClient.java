@@ -1,6 +1,6 @@
 package com.schedule.job.admin.jdbc;
 
-import com.schedule.job.admin.config.JdbcConfigLoader;
+import com.schedule.job.common.config.JdbcConfigLoader;
 import lombok.extern.slf4j.Slf4j;
 
 import java.sql.Connection;

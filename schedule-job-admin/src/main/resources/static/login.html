@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户登录 - 分布式调度任务平台</title>
+    <!-- Element Plus CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .login-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #303133;
+            margin-bottom: 10px;
+        }
+        .login-subtitle {
+            font-size: 14px;
+            color: #909399;
+        }
+        .login-form {
+            margin-top: 30px;
+        }
+        .login-button {
+            width: 100%;
+            height: 44px;
+            font-size: 16px;
+        }
+        .login-footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 12px;
+            color: #909399;
+        }
+        .switch-mode {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #409eff;
+            cursor: pointer;
+        }
+        .switch-mode:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="login-container">
+            <div class="login-header">
+                <div class="login-title">分布式调度任务平台</div>
+                <div class="login-subtitle">{{ isRegister ? '创建新账号' : '请登录您的账号' }}</div>
+            </div>
+            <!-- 登录表单 -->
+            <el-form 
+                v-if="!isRegister"
+                ref="loginFormRef" 
+                :model="loginForm" 
+                :rules="loginRules" 
+                class="login-form"
+                label-width="0"
+                @submit.prevent="handleLogin">
+                <el-form-item prop="username">
+                    <el-input
+                        v-model="loginForm.username"
+                        placeholder="请输入用户名"
+                        size="large"
+                        clearable>
+                    </el-input>
+                </el-form-item>
+                <el-form-item prop="password">
+                    <el-input
+                        v-model="loginForm.password"
+                        type="password"
+                        placeholder="请输入密码"
+                        size="large"
+                        show-password
+                        clearable
+                        @keyup.enter="handleLogin">
+                    </el-input>
+                </el-form-item>
+                <el-form-item>
+                    <el-button 
+                        type="primary" 
+                        class="login-button" 
+                        :loading="loading"
+                        @click="handleLogin">
+                        登录
+                    </el-button>
+                </el-form-item>
+            </el-form>
+            <!-- 注册表单 -->
+            <el-form 
+                v-if="isRegister"
+                ref="registerFormRef" 
+                :model="registerForm" 
+                :rules="registerRules" 
+                class="login-form"
+                label-width="0"
+                @submit.prevent="handleRegister">
+                <el-form-item prop="username">
+                    <el-input
+                        v-model="registerForm.username"
+                        placeholder="请输入用户名"
+                        size="large"
+                        clearable>
+                    </el-input>
+                </el-form-item>
+                <el-form-item prop="password">
+                    <el-input
+                        v-model="registerForm.password"
+                        type="password"
+                        placeholder="请输入密码（至少6位）"
+                        size="large"
+                        show-password
+                        clearable>
+                    </el-input>
+                </el-form-item>
+                <el-form-item prop="confirmPassword">
+                    <el-input
+                        v-model="registerForm.confirmPassword"
+                        type="password"
+                        placeholder="请确认密码"
+                        size="large"
+                        show-password
+                        clearable
+                        @keyup.enter="handleRegister">
+                    </el-input>
+                </el-form-item>
+                <el-form-item prop="email">
+                    <el-input
+                        v-model="registerForm.email"
+                        placeholder="请输入邮箱"
+                        size="large"
+                        clearable>
+                    </el-input>
+                </el-form-item>
+                <el-form-item prop="roleId">
+                    <el-select
+                        v-model="registerForm.roleId"
+                        placeholder="请选择角色"
+                        size="large"
+                        style="width: 100%"
+                        :loading="loadingRoles">
+                        <el-option
+                            v-for="role in registerableRoles"
+                            :key="role.id"
+                            :label="role.roleName"
+                            :value="role.id">
+                            <span style="float: left">{{ role.roleName }}</span>
+                            <span style="float: right; color: #8492a6; font-size: 13px">{{ role.description || '暂无描述' }}</span>
+                        </el-option>
+                    </el-select>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.5;" v-if="registerableRoles.length > 0">
+                        <span style="color: #409eff;">ℹ️</span> 请选择您的角色，不同角色拥有不同的权限
+                    </div>
+                </el-form-item>
+                <el-form-item>
+                    <el-button 
+                        type="primary" 
+                        class="login-button" 
+                        :loading="loading"
+                        @click="handleRegister">
+                        注册
+                    </el-button>
+                </el-form-item>
+            </el-form>
+            <div class="switch-mode" @click="toggleMode">
+                {{ isRegister ? '已有账号？去登录' : '没有账号？去注册' }}
+            </div>
+            <div class="login-footer" v-if="!isRegister">
+                <div>默认账号：admin / admin123</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Element Plus -->
+    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
+    <!-- Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+    <script>
+        const { createApp, ref, reactive } = Vue;
+        const { ElMessage } = ElementPlus;
+        
+        // API 请求封装
+        const api = axios.create({
+            baseURL: '/api',
+            timeout: 10000
+        });
+
+        // 响应拦截器
+        api.interceptors.response.use(
+            response => {
+                const res = response.data;
+                if (res.code === 200) {
+                    return res.data !== undefined ? res.data : null;
+                } else {
+                    // 确保显示错误消息
+                    const errorMsg = res.message || '请求失败';
+                    ElMessage.error(errorMsg);
+                    return Promise.reject(new Error(errorMsg));
+                }
+            },
+            error => {
+                // 处理各种错误情况，确保显示错误消息
+                let errorMsg = '请求失败';
+                
+                if (error.response) {
+                    // 服务器返回了错误响应
+                    const res = error.response.data;
+                    if (res && res.message) {
+                        errorMsg = res.message;
+                    } else if (res && res.error) {
+                        errorMsg = res.error;
+                    } else {
+                        // HTTP 状态码错误
+                        switch (error.response.status) {
+                            case 400:
+                                errorMsg = '请求参数错误';
+                                break;
+                            case 401:
+                                errorMsg = '未授权，请先登录';
+                                break;
+                            case 403:
+                                errorMsg = '无权限访问';
+                                break;
+                            case 404:
+                                errorMsg = '接口不存在';
+                                break;
+                            case 406:
+                                errorMsg = '请求格式不正确';
+                                break;
+                            case 500:
+                                errorMsg = '服务器内部错误';
+                                break;
+                            default:
+                                errorMsg = `请求失败 (${error.response.status})`;
+                        }
+                    }
+                } else if (error.request) {
+                    // 请求已发出但没有收到响应
+                    errorMsg = '网络错误，请检查网络连接';
+                } else {
+                    // 其他错误
+                    errorMsg = error.message || '请求失败';
+                }
+                
+                // 显示错误消息
+                ElMessage.error(errorMsg);
+                return Promise.reject(error);
+            }
+        );
+
+        const app = createApp({
+            setup() {
+                const loginFormRef = ref(null);
+                const registerFormRef = ref(null);
+                const loading = ref(false);
+                const loadingRoles = ref(false);
+                const isRegister = ref(false);
+                
+                const loginForm = reactive({
+                    username: '',
+                    password: ''
+                });
+
+                const registerForm = reactive({
+                    username: '',
+                    password: '',
+                    confirmPassword: '',
+                    email: '',
+                    roleId: null // 角色ID，由用户选择
+                });
+                
+                // 可注册的角色列表
+                const registerableRoles = ref([]);
+
+                const loginRules = {
+                    username: [
+                        { required: true, message: '请输入用户名', trigger: 'blur' }
+                    ],
+                    password: [
+                        { required: true, message: '请输入密码', trigger: 'blur' },
+                        { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
+                    ]
+                };
+
+                const validateConfirmPassword = (rule, value, callback) => {
+                    if (value === '') {
+                        callback(new Error('请再次输入密码'));
+                    } else if (value !== registerForm.password) {
+                        callback(new Error('两次输入密码不一致'));
+                    } else {
+                        callback();
+                    }
+                };
+
+                const registerRules = {
+                    username: [
+                        { required: true, message: '请输入用户名', trigger: 'blur' },
+                        { min: 3, message: '用户名长度不能少于3位', trigger: 'blur' },
+                        { max: 20, message: '用户名长度不能超过20位', trigger: 'blur' },
+                        { pattern: /^[a-zA-Z0-9_]+$/, message: '用户名只能包含字母、数字和下划线', trigger: 'blur' }
+                    ],
+                    password: [
+                        { required: true, message: '请输入密码', trigger: 'blur' },
+                        { min: 6, message: '密码长度不能少于6位', trigger: 'blur' },
+                        { max: 20, message: '密码长度不能超过20位', trigger: 'blur' }
+                    ],
+                    confirmPassword: [
+                        { required: true, validator: validateConfirmPassword, trigger: 'blur' }
+                    ],
+                    email: [
+                        { required: true, message: '请输入邮箱', trigger: 'blur' },
+                        { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
+                    ],
+                    roleId: [
+                        { required: true, message: '请选择角色', trigger: 'change' }
+                    ]
+                };
+
+                const handleLogin = async () => {
+                    if (!loginFormRef.value) return;
+                    
+                    await loginFormRef.value.validate(async (valid) => {
+                        if (valid) {
+                            loading.value = true;
+                            try {
+                                // 调用登录接口，参数与 controller 一致：username, password
+                                // 使用 form-data 格式发送
+                                const formData = new URLSearchParams();
+                                formData.append('username', loginForm.username);
+                                formData.append('password', loginForm.password);
+                                
+                                const userSession = await api.post('/login', formData.toString(), {
+                                    headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded'
+                                    }
+                                });
+                                
+                                if (userSession && userSession.token) {
+                                    // 保存 token 到 localStorage
+                                    localStorage.setItem('token', userSession.token);
+                                    localStorage.setItem('userId', userSession.userId);
+                                    
+                                    ElMessage.success('登录成功');
+                                    
+                                    // 跳转到主页面
+                                    setTimeout(() => {
+                                        window.location.href = '/index.html';
+                                    }, 1000);
+                                } else {
+                                    ElMessage.error('登录失败，未获取到token');
+                                }
+                            } catch (error) {
+                                // 错误已在拦截器中处理，这里只记录日志
+                                console.error('登录失败:', error);
+                            } finally {
+                                loading.value = false;
+                            }
+                        }
+                    });
+                };
+
+                const handleRegister = async () => {
+                    if (!registerFormRef.value) return;
+                    
+                    await registerFormRef.value.validate(async (valid) => {
+                        if (valid) {
+                            loading.value = true;
+                            try {
+                                // 保存用户名，因为后面会清空表单
+                                const registeredUsername = registerForm.username;
+                                
+                                // 调用注册接口，参数与 controller 一致：username, password, email, roleId
+                                // 使用 form-data 格式发送
+                                const formData = new URLSearchParams();
+                                formData.append('username', registerForm.username);
+                                formData.append('password', registerForm.password);
+                                formData.append('email', registerForm.email);
+                                // 注册时默认使用普通用户角色（roleId=2）
+                                formData.append('roleId', registerForm.roleId || 2);
+                                
+                                const userInfo = await api.post('/login/register', formData.toString(), {
+                                    headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded'
+                                    }
+                                });
+                                
+                                if (userInfo) {
+                                    ElMessage.success('注册成功，请登录');
+                                    
+                                    // 清空注册表单
+                                    Object.assign(registerForm, {
+                                        username: '',
+                                        password: '',
+                                        confirmPassword: '',
+                                        email: '',
+                                        roleId: null // 重置角色选择
+                                    });
+                                    
+                                    // 切换到登录模式
+                                    isRegister.value = false;
+                                    
+                                    // 填充用户名到登录表单（使用保存的用户名）
+                                    loginForm.username = registeredUsername;
+                                }
+                            } catch (error) {
+                                // 错误已在拦截器中处理，这里只记录日志
+                                console.error('注册失败:', error);
+                            } finally {
+                                loading.value = false;
+                            }
+                        }
+                    });
+                };
+
+                // 加载可注册的角色列表
+                const loadRegisterableRoles = async () => {
+                    if (registerableRoles.value.length > 0) {
+                        return; // 已经加载过，不需要重复加载
+                    }
+                    loadingRoles.value = true;
+                    try {
+                        const roles = await api.get('/login/register/roles');
+                        if (roles && Array.isArray(roles)) {
+                            registerableRoles.value = roles;
+                            // 如果只有一个角色，自动选择
+                            if (roles.length === 1) {
+                                registerForm.roleId = roles[0].id;
+                            }
+                        }
+                    } catch (error) {
+                        console.error('加载角色列表失败:', error);
+                        ElMessage.warning('加载角色列表失败，请刷新页面重试');
+                    } finally {
+                        loadingRoles.value = false;
+                    }
+                };
+                
+                const toggleMode = () => {
+                    isRegister.value = !isRegister.value;
+                    // 清空表单
+                    if (isRegister.value) {
+                        // 切换到注册模式时，加载角色列表
+                        loadRegisterableRoles();
+                        Object.assign(registerForm, {
+                            username: '',
+                            password: '',
+                            confirmPassword: '',
+                            email: '',
+                            roleId: null
+                        });
+                    } else {
+                        Object.assign(loginForm, {
+                            username: '',
+                            password: ''
+                        });
+                    }
+                };
+
+                return {
+                    loginFormRef,
+                    registerFormRef,
+                    loading,
+                    loadingRoles,
+                    isRegister,
+                    loginForm,
+                    registerForm,
+                    registerableRoles,
+                    loginRules,
+                    registerRules,
+                    handleLogin,
+                    handleRegister,
+                    toggleMode,
+                    loadRegisterableRoles
+                };
+            }
+        });
+        
+        app.use(ElementPlus).mount('#app');
+    </script>
+</body>
+</html>

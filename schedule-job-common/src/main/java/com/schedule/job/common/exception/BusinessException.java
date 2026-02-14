@@ -1,6 +1,7 @@
 package com.schedule.job.common.exception;
 
 import com.schedule.job.common.enums.BusinessExceptionCode;
+import com.schedule.job.common.enums.ResultCode;
 import lombok.Getter;
 
 @Getter
@@ -15,6 +16,11 @@ public class BusinessException extends RuntimeException {
 
     // 使用代码内部枚举的错误码和自定义消息
     public BusinessException(BusinessExceptionCode code, String message) {
+        super(message);
+        this.code = code.getCode();
+    }
+
+    public BusinessException(ResultCode code, String message) {
         super(message);
         this.code = code.getCode();
     }

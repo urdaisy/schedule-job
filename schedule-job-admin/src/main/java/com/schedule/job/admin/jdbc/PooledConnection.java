@@ -1,5 +1,7 @@
 package com.schedule.job.admin.jdbc;
 
+import com.schedule.job.common.infra.jdbc.JdbcClient;
+
 import java.sql.*;
 import java.util.Map;
 import java.util.Properties;

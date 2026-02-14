@@ -22,6 +22,18 @@
     </properties>
 
     <dependencies>
+        <!-- 本项目的 common 模块 -->
+        <dependency>
+            <groupId>com.schedule.job</groupId>
+            <artifactId>schedule-job-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- 本项目的 security 模块 -->
+        <dependency>
+            <groupId>com.schedule.job</groupId>
+            <artifactId>schedule-job-security</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!-- Spring Boot Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -54,13 +66,6 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- 本项目的 common 模块 -->
-        <dependency>
-            <groupId>com.schedule.job</groupId>
-            <artifactId>schedule-job-common</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-boot-starter</artifactId>
@@ -71,6 +76,13 @@
             <groupId>org.dom4j</groupId>
             <artifactId>dom4j</artifactId>
             <version>2.1.4</version>
+        </dependency>
+        
+        <!-- 本项目的 alarm 模块 -->
+        <dependency>
+            <groupId>com.schedule.job</groupId>
+            <artifactId>schedule-job-alarm</artifactId>
+            <version>${project.version}</version>
         </dependency>
     </dependencies>
 

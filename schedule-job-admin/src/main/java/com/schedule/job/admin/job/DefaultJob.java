@@ -1,6 +1,5 @@
 package com.schedule.job.admin.job;
 
-import com.schedule.job.admin.repository.JobLogRepository;
 import com.schedule.job.common.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.*;
@@ -15,11 +14,6 @@ import static com.schedule.job.common.enums.BusinessExceptionCode.JOB_RETRY_FAIL
  */
 @Slf4j
 public class DefaultJob extends BaseJob {
-
-    public DefaultJob(JobLogRepository jobLogRepository) {
-        super(jobLogRepository);
-    }
-
     @Override
     protected void executeInternal(String jobName, String jobParam) throws Exception {
         log.info("执行通用任务：{}，参数：{}", jobName, jobParam);
@@ -33,7 +27,9 @@ public class DefaultJob extends BaseJob {
     }
 
     @Override
-    protected void scheduleRetryJob(Scheduler scheduler, String jobName, String jobGroup, int retryInterval) throws Exception {
+    protected void scheduleRetryJob(Scheduler scheduler, String jobName, String jobGroup, 
+                                   int retryInterval, int nextRetryCount, int maxRetryCount,
+                                   Long jobId, String jobParam) throws Exception {
         if (retryInterval <= 0) {
             retryInterval = 60;
             log.warn("重试间隔无效，使用默认值60秒");
@@ -48,11 +44,25 @@ public class DefaultJob extends BaseJob {
             throw new BusinessException(JOB_RETRY_FAILED, "原始任务不存在，无法创建重试任务");
         }
 
+        // 获取原始JobDetail，以便复制JobDataMap
+        JobDetail originalJobDetail = scheduler.getJobDetail(jobKey);
+        if (originalJobDetail == null) {
+            log.error("无法获取原始任务详情：jobName={}, jobGroup={}", jobName, jobGroup);
+            throw new BusinessException(JOB_RETRY_FAILED, "无法获取原始任务详情");
+        }
+        
+        // 创建新的JobDataMap，包含重试信息
+        JobDataMap retryDataMap = new JobDataMap(originalJobDetail.getJobDataMap());
+        retryDataMap.put("currentRetryCount", nextRetryCount);
+        retryDataMap.put("maxRetryCount", maxRetryCount);
+        retryDataMap.put("retryInterval", retryInterval);
+
         Date startTime = new Date(System.currentTimeMillis() + retryInterval * 1000L);
 
         SimpleTrigger retryTrigger = TriggerBuilder.newTrigger()
                 .withIdentity(triggerKey)
                 .forJob(jobKey)
+                .usingJobData(retryDataMap)
                 .startAt(startTime)
                 .withSchedule(SimpleScheduleBuilder.simpleSchedule()
                         .withRepeatCount(0)
@@ -61,7 +71,7 @@ public class DefaultJob extends BaseJob {
 
         scheduler.scheduleJob(retryTrigger);
 
-        log.info("创建重试任务成功：jobName={}, jobGroup={}, 将在{}秒后执行",
-                jobName, jobGroup, retryInterval);
+        log.info("创建重试任务成功：jobName={}, jobGroup={}, 第{}次重试将在{}秒后执行",
+                jobName, jobGroup, nextRetryCount, retryInterval);
     }
 }

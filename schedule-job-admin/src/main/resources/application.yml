@@ -48,3 +48,38 @@ spring:
             threadCount: 15   #线程池中的线程总个数，表示最多可以同时执行的个任务/作业个数
             threadPriority: 5   #线程优先级
             threadsInheritContextClassLoaderOfInitializingThread: true #线程继承初始化线程的上下文类加载器
+  #自定义配置
+  retry:
+    default-max-count: 3
+    default-interval: 60
+  connection-pool:
+    quartz:
+      max-size: 10
+      min-idle: 2
+    business:
+      max-size: 20
+      min-idle: 5
+  # 邮件配置
+  mail:
+    host: smtp.example.com  # 邮件服务器地址，需要根据实际情况配置
+    port: 587  # 邮件服务器端口
+    username: your-email@example.com  # 发件人邮箱，需要根据实际情况配置
+    password: your-password  # 发件人邮箱密码，需要根据实际情况配置
+    from: your-email@example.com  # 默认发件人，需要根据实际情况配置
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+# 告警配置
+alert:
+  email:
+    # 开发模式：设置为 true 时，不会实际发送邮件，而是将邮件内容输出到日志中
+    # 适用于开发/测试环境，无需配置真实的邮件服务器
+    # 设置为 false 时，会尝试实际发送邮件（需要配置真实的邮件服务器）
+    dev-mode: true

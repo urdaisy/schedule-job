@@ -2,10 +2,10 @@ package com.schedule.job.admin.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
-import com.schedule.job.admin.orm.UniqueConstraint;
-import com.schedule.job.admin.orm.Entity;
-import com.schedule.job.admin.orm.Id;
-import com.schedule.job.admin.orm.Column;
+import com.schedule.job.common.infra.orm.UniqueConstraint;
+import com.schedule.job.common.infra.orm.Entity;
+import com.schedule.job.common.infra.orm.Id;
+import com.schedule.job.common.infra.orm.Column;
 
 import java.time.LocalDateTime;
 
@@ -35,7 +35,7 @@ public class JobInfoEntity {
     private String jobParam; // 任务参数（JSON格式字符串）
 
     @Column(name = "status", nullable = false)
-    private Integer status; // 0-暂停，1-运行中
+    private Integer status; // 0-暂停，1-运行中，2-失败
 
     @Column(name = "start_time")
     private LocalDateTime startTime; // 创建时间

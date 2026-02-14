@@ -115,7 +115,7 @@
     </style>
 </head>
 <body>
-    <div id="app">
+    <div id="app" style="display: none;">
         <div class="app-container">
             <div class="app-header">
                 <div class="logo">分布式调度任务平台</div>
@@ -129,6 +129,16 @@
                     <div class="menu-item" :class="{active: currentPage === 'log'}" @click="navigate('log')">
                         日志管理
                     </div>
+                    <div class="menu-item" v-if="currentUser && currentUser.roleId === 1" :class="{active: currentPage === 'user'}" @click="navigate('user')">
+                        用户管理
+                    </div>
+                    <div class="menu-item" v-if="currentUser && currentUser.roleId === 1" :class="{active: currentPage === 'alert'}" @click="navigate('alert')">
+                        告警管理
+                    </div>
+                </div>
+                <div style="margin-left: auto; display: flex; align-items: center; gap: 15px;">
+                    <span style="font-size: 14px;">{{ currentUser.username || '用户' }}</span>
+                    <el-button type="text" style="color: white;" @click="handleLogout">退出登录</el-button>
                 </div>
             </div>
             <div class="app-main">
@@ -188,13 +198,25 @@
                             </div>
                         </template>
                         <el-table :data="recentJobs" style="width: 100%">
-                            <el-table-column prop="jobName" label="任务名称" width="200" />
-                            <el-table-column prop="jobGroup" label="任务组" width="150" />
-                            <el-table-column prop="cronExpression" label="Cron表达式" width="180" />
+                            <el-table-column prop="jobName" label="任务名称" width="200">
+                                <template #default="{ row }">
+                                    {{ row.jobName || '-' }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="jobGroup" label="任务组" width="150">
+                                <template #default="{ row }">
+                                    {{ row.jobGroup || '-' }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="cronExpression" label="Cron表达式" width="180">
+                                <template #default="{ row }">
+                                    {{ row.cronExpression || '-' }}
+                                </template>
+                            </el-table-column>
                             <el-table-column prop="status" label="状态" width="100">
                                 <template #default="{ row }">
-                                    <el-tag :type="row.status === 1 ? 'success' : 'info'">
-                                        {{ row.status === 1 ? '运行中' : '已暂停' }}
+                                    <el-tag :type="getJobStatusType(row.status)">
+                                        {{ getJobStatusText(row.status) }}
                                     </el-tag>
                                 </template>
                             </el-table-column>
@@ -216,29 +238,66 @@
                             </div>
                         </template>
                         <el-table v-loading="loading" :data="jobList" style="width: 100%" stripe>
-                            <el-table-column prop="jobName" label="任务名称" width="200" />
-                            <el-table-column prop="jobGroup" label="任务组" width="150" />
-                            <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-                            <el-table-column prop="cronExpression" label="Cron表达式" width="180" />
+                            <el-table-column prop="jobName" label="任务名称" width="200">
+                                <template #default="{ row }">
+                                    {{ row.jobName || '-' }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="jobGroup" label="任务组" width="150">
+                                <template #default="{ row }">
+                                    {{ row.jobGroup || '-' }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip>
+                                <template #default="{ row }">
+                                    {{ row.description || '-' }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="cronExpression" label="Cron表达式" width="180">
+                                <template #default="{ row }">
+                                    {{ row.cronExpression || '-' }}
+                                </template>
+                            </el-table-column>
                             <el-table-column prop="status" label="状态" width="100">
                                 <template #default="{ row }">
-                                    <el-tag :type="row.status === 1 ? 'success' : 'info'">
-                                        {{ row.status === 1 ? '运行中' : '已暂停' }}
+                                    <el-tag :type="getJobStatusType(row.status)">
+                                        {{ getJobStatusText(row.status) }}
                                     </el-tag>
                                 </template>
                             </el-table-column>
                             <el-table-column prop="updateTime" label="更新时间" width="180" />
-                            <el-table-column label="操作" width="300" fixed="right">
+                            <el-table-column label="操作" width="350" fixed="right">
                                 <template #default="{ row }">
                                     <el-button link type="primary" size="small" @click="showFormDialog('edit', row)">
                                         编辑
                                     </el-button>
-                                    <el-button link :type="row.status === 1 ? 'warning' : 'success'" size="small" 
+                                    <el-button 
+                                        v-if="row.status !== 2" 
+                                        link 
+                                        :type="row.status === 1 ? 'warning' : 'success'" 
+                                        size="small" 
                                         @click="toggleStatus(row)">
                                         {{ row.status === 1 ? '暂停' : '恢复' }}
                                     </el-button>
+                                    <el-button 
+                                        v-if="row.status === 2" 
+                                        link 
+                                        type="success" 
+                                        size="small" 
+                                        @click="resumeFailedJob(row)">
+                                        恢复
+                                    </el-button>
                                     <el-button link type="info" size="small" @click="runJobNow(row)">
                                         立即执行
+                                    </el-button>
+                                    <!-- 只有管理员才能看到告警配置按钮 -->
+                                    <el-button 
+                                        v-if="currentUser && currentUser.roleId === 1" 
+                                        link 
+                                        type="warning" 
+                                        size="small" 
+                                        @click="showAlertConfigDialog(row)">
+                                        告警配置
                                     </el-button>
                                     <el-button link type="danger" size="small" @click="deleteJob(row)">
                                         删除
@@ -262,8 +321,21 @@
                             </div>
                         </template>
                         <el-table v-loading="logLoading" :data="logList" style="width: 100%" stripe>
-                            <el-table-column prop="id" label="ID" width="80" />
-                            <el-table-column prop="jobId" label="任务ID" width="100" />
+                            <el-table-column prop="id" label="ID" width="80">
+                                <template #default="{ row }">
+                                    {{ row.id || '-' }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="任务名称" width="200">
+                                <template #default="{ row }">
+                                    {{ getJobName(row.jobId) || '-' }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="任务组" width="150">
+                                <template #default="{ row }">
+                                    {{ getJobGroup(row.jobId) || '-' }}
+                                </template>
+                            </el-table-column>
                             <el-table-column prop="triggerTime" label="触发时间" width="180">
                                 <template #default="{ row }">
                                     {{ formatDateTime(row.triggerTime) }}
@@ -294,7 +366,13 @@
                                     <el-button link type="primary" size="small" @click="viewLogDetail(row)">
                                         查看详情
                                     </el-button>
-                                    <el-button link type="danger" size="small" @click="deleteLog(row)">
+                                    <!-- 只有管理员才能删除日志 -->
+                                    <el-button 
+                                        v-if="currentUser && currentUser.roleId === 1" 
+                                        link 
+                                        type="danger" 
+                                        size="small" 
+                                        @click="deleteLog(row)">
                                         删除
                                     </el-button>
                                 </template>
@@ -313,8 +391,345 @@
                         </div>
                     </el-card>
                 </div>
+
+                <!-- 用户管理（仅管理员可见） -->
+                <div v-if="currentPage === 'user' && currentUser && currentUser.roleId === 1" class="page-container">
+                    <el-card>
+                        <template #header>
+                            <div class="card-header">
+                                <span>用户管理</span>
+                                <el-button type="primary" @click="showUserFormDialog('create')">
+                                    <span style="margin-right: 4px;">+</span>
+                                    创建用户
+                                </el-button>
+                            </div>
+                        </template>
+                        <el-table v-loading="userLoading" :data="userList" style="width: 100%" stripe>
+                            <el-table-column prop="id" label="ID" width="80">
+                                <template #default="{ row }">
+                                    {{ row.id || '-' }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="username" label="用户名" width="150">
+                                <template #default="{ row }">
+                                    {{ row.username || '-' }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="email" label="邮箱" width="200">
+                                <template #default="{ row }">
+                                    {{ row.email || '-' }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="roleName" label="角色" width="120">
+                                <template #default="{ row }">
+                                    <el-tag :type="row.roleId === 1 ? 'danger' : 'info'">
+                                        {{ row.roleName || '未知' }}
+                                    </el-tag>
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="权限" min-width="300">
+                                <template #default="{ row }">
+                                    <el-tag 
+                                        v-for="permission in (row.permissions || [])" 
+                                        :key="permission.id"
+                                        size="small"
+                                        style="margin-right: 5px; margin-bottom: 5px;">
+                                        {{ permission.permissionName }}
+                                    </el-tag>
+                                    <span v-if="!row.permissions || row.permissions.length === 0" style="color: #909399;">无权限</span>
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="status" label="状态" width="100">
+                                <template #default="{ row }">
+                                    <el-tag :type="row.status === 1 ? 'success' : 'danger'">
+                                        {{ row.status === 1 ? '启用' : '禁用' }}
+                                    </el-tag>
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="createTime" label="创建时间" width="180">
+                                <template #default="{ row }">
+                                    {{ formatDateTime(row.createTime) }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="操作" width="250" fixed="right">
+                                <template #default="{ row }">
+                                    <el-button link type="primary" size="small" @click="showUserFormDialog('edit', row)">
+                                        编辑
+                                    </el-button>
+                                    <el-button 
+                                        link 
+                                        :type="row.status === 1 ? 'warning' : 'success'" 
+                                        size="small" 
+                                        @click="toggleUserStatus(row)">
+                                        {{ row.status === 1 ? '禁用' : '启用' }}
+                                    </el-button>
+                                    <el-button link type="danger" size="small" @click="deleteUser(row)">
+                                        删除
+                                    </el-button>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                    </el-card>
+                </div>
+
+                <!-- 告警管理（仅管理员可见） -->
+                <div v-if="currentPage === 'alert' && currentUser && currentUser.roleId === 1" class="page-container">
+                    <el-tabs v-model="alertActiveTab" type="border-card" @tab-change="handleAlertTabChange">
+                        <!-- 告警配置管理 -->
+                        <el-tab-pane label="告警配置" name="config">
+                            <el-card>
+                                <template #header>
+                                    <div class="card-header">
+                                        <span>告警配置列表</span>
+                                        <el-button type="primary" @click="showAlertConfigFormDialog('create')">
+                                            <span style="margin-right: 4px;">+</span>
+                                            创建告警配置
+                                        </el-button>
+                                    </div>
+                                </template>
+                                <el-table v-loading="alertConfigLoading" :data="alertConfigList" style="width: 100%" stripe>
+                                    <el-table-column prop="id" label="ID" width="80">
+                                        <template #default="{ row }">
+                                            {{ row.id || '-' }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="jobId" label="任务ID" width="100">
+                                        <template #default="{ row }">
+                                            {{ row.jobId || '-' }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="alertType" label="告警类型" width="120">
+                                        <template #default="{ row }">
+                                            <el-tag>{{ row.alertType }}</el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="receiverEmail" label="接收人邮箱" min-width="250" show-overflow-tooltip />
+                                    <el-table-column prop="enabled" label="状态" width="100">
+                                        <template #default="{ row }">
+                                            <el-tag :type="row.enabled === 1 ? 'success' : 'danger'">
+                                                {{ row.enabled === 1 ? '启用' : '禁用' }}
+                                            </el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="createTime" label="创建时间" width="180">
+                                        <template #default="{ row }">
+                                            {{ formatDateTime(row.createTime) }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="updateTime" label="更新时间" width="180">
+                                        <template #default="{ row }">
+                                            {{ formatDateTime(row.updateTime) }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column label="操作" width="200" fixed="right">
+                                        <template #default="{ row }">
+                                            <el-button link type="primary" size="small" @click="showAlertConfigFormDialog('edit', row)">
+                                                编辑
+                                            </el-button>
+                                            <el-button link type="danger" size="small" @click="deleteAlertConfig(row)">
+                                                删除
+                                            </el-button>
+                                        </template>
+                                    </el-table-column>
+                                </el-table>
+                            </el-card>
+                        </el-tab-pane>
+                        
+                        <!-- 告警记录查询 -->
+                        <el-tab-pane label="告警记录" name="record">
+                            <el-card>
+                                <template #header>
+                                    <div class="card-header">
+                                        <span>告警记录列表</span>
+                                        <el-button type="primary" @click="loadAlertRecordList">
+                                            <span style="margin-right: 4px;">🔄</span>
+                                            刷新
+                                        </el-button>
+                                    </div>
+                                </template>
+                                <el-table v-loading="alertRecordLoading" :data="alertRecordList" style="width: 100%" stripe>
+                                    <el-table-column prop="id" label="ID" width="80">
+                                        <template #default="{ row }">
+                                            {{ row.id || '-' }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column label="任务名称" width="200">
+                                        <template #default="{ row }">
+                                            {{ getJobName(row.jobId) || '-' }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column label="任务组" width="150">
+                                        <template #default="{ row }">
+                                            {{ getJobGroup(row.jobId) || '-' }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="jobLogId" label="日志ID" width="100">
+                                        <template #default="{ row }">
+                                            {{ row.jobLogId || '-' }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="alertType" label="告警类型" width="120">
+                                        <template #default="{ row }">
+                                            <el-tag>{{ row.alertType }}</el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="receiver" label="接收人" min-width="200" show-overflow-tooltip>
+                                        <template #default="{ row }">
+                                            {{ row.receiver || '-' }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="alertStatus" label="状态" width="120">
+                                        <template #default="{ row }">
+                                            <el-tag :type="getAlertStatusType(row.alertStatus)">
+                                                {{ getAlertStatusText(row.alertStatus) }}
+                                            </el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="alertTime" label="告警时间" width="180">
+                                        <template #default="{ row }">
+                                            {{ formatDateTime(row.alertTime) }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="errorMsg" label="错误信息" min-width="200" show-overflow-tooltip />
+                                    <el-table-column prop="createTime" label="创建时间" width="180">
+                                        <template #default="{ row }">
+                                            {{ formatDateTime(row.createTime) }}
+                                        </template>
+                                    </el-table-column>
+                                </el-table>
+                            </el-card>
+                        </el-tab-pane>
+                    </el-tabs>
+                </div>
             </div>
         </div>
+
+        <!-- 用户表单对话框 -->
+        <el-dialog 
+            v-model="userFormDialogVisible" 
+            :title="userFormMode === 'create' ? '创建用户' : '编辑用户'" 
+            width="600px"
+            :append-to-body="true"
+            :close-on-click-modal="false">
+            <el-form ref="userFormRef" :model="userForm" :rules="userFormRules" label-width="100px">
+                <el-form-item label="用户名" prop="username">
+                    <el-input 
+                        v-model="userForm.username" 
+                        placeholder="请输入用户名" 
+                        :disabled="userFormMode === 'edit'" />
+                </el-form-item>
+                <el-form-item label="密码" prop="password" v-if="userFormMode === 'create'">
+                    <el-input 
+                        v-model="userForm.password" 
+                        type="password"
+                        placeholder="请输入密码（至少6位）" 
+                        show-password />
+                </el-form-item>
+                <el-form-item label="邮箱" prop="email">
+                    <el-input 
+                        v-model="userForm.email" 
+                        placeholder="请输入邮箱" />
+                </el-form-item>
+                <el-form-item label="角色" prop="roleId">
+                    <el-select v-model="userForm.roleId" placeholder="请选择角色" style="width: 100%">
+                        <el-option
+                            v-for="role in roleList"
+                            :key="role.id"
+                            :label="role.roleName"
+                            :value="role.id">
+                            <span style="float: left">{{ role.roleName }}</span>
+                            <span style="float: right; color: #8492a6; font-size: 13px">{{ role.description || '暂无描述' }}</span>
+                        </el-option>
+                    </el-select>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="userFormDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="submitUserForm" :loading="userSubmitting">
+                    {{ userFormMode === 'create' ? '创建' : '更新' }}
+                </el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 告警配置表单对话框 -->
+        <el-dialog 
+            v-model="alertConfigFormDialogVisible" 
+            :title="alertConfigFormMode === 'create' ? '创建告警配置' : '编辑告警配置'" 
+            width="600px"
+            :append-to-body="true"
+            :close-on-click-modal="false">
+            <el-form ref="alertConfigFormFormRef" :model="alertConfigFormForm" :rules="alertConfigFormFormRules" label-width="120px">
+                <el-form-item label="任务ID" prop="jobId">
+                    <el-input-number 
+                        v-model="alertConfigFormForm.jobId" 
+                        placeholder="请输入任务ID"
+                        :min="1"
+                        style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="告警类型" prop="alertType">
+                    <el-select v-model="alertConfigFormForm.alertType" placeholder="请选择告警类型" style="width: 100%">
+                        <el-option label="邮件告警" value="EMAIL" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="接收人邮箱" prop="receiverEmail">
+                    <el-input 
+                        v-model="alertConfigFormForm.receiverEmail" 
+                        placeholder="请输入接收人邮箱，多个邮箱用逗号分隔"
+                        type="textarea"
+                        :rows="3" />
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px;">
+                        多个邮箱请用逗号分隔，例如：user1@example.com,user2@example.com
+                    </div>
+                </el-form-item>
+                <el-form-item label="是否启用">
+                    <el-switch v-model="alertConfigFormForm.enabled" :active-value="1" :inactive-value="0" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="alertConfigFormDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="submitAlertConfigForm" :loading="alertConfigFormSubmitting">
+                    {{ alertConfigFormMode === 'create' ? '创建' : '更新' }}
+                </el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 告警配置对话框 -->
+        <el-dialog 
+            v-model="alertConfigDialogVisible" 
+            title="告警配置" 
+            width="600px"
+            :append-to-body="true"
+            :close-on-click-modal="false">
+            <el-form ref="alertConfigFormRef" :model="alertConfigForm" :rules="alertConfigFormRules" label-width="120px">
+                <el-form-item label="任务名称">
+                    <el-input v-model="alertConfigForm.jobName" disabled />
+                </el-form-item>
+                <el-form-item label="告警类型">
+                    <el-select v-model="alertConfigForm.alertType" placeholder="请选择告警类型" style="width: 100%">
+                        <el-option label="邮件告警" value="EMAIL" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="接收人邮箱" prop="receiverEmail">
+                    <el-input 
+                        v-model="alertConfigForm.receiverEmail" 
+                        placeholder="请输入接收人邮箱，多个邮箱用逗号分隔"
+                        type="textarea"
+                        :rows="3" />
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px;">
+                        多个邮箱请用逗号分隔，例如：user1@example.com,user2@example.com
+                    </div>
+                </el-form-item>
+                <el-form-item label="是否启用">
+                    <el-switch v-model="alertConfigForm.enabled" :active-value="1" :inactive-value="0" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="alertConfigDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="submitAlertConfig" :loading="alertConfigSubmitting">
+                    保存
+                </el-button>
+            </template>
+        </el-dialog>
 
         <!-- 日志详情对话框 -->
         <el-dialog v-model="logDetailVisible" title="日志详情" width="800px">
@@ -398,7 +813,7 @@
                         </el-option>
                     </el-select>
                     <el-text type="info" size="small" style="display: block; margin-top: 5px;">
-                        选择任务执行类
+                        选择任务执行类，后端会根据选择自动补全任务类全路径
                     </el-text>
                 </el-form-item>
                 <el-form-item label="任务参数" prop="jobParam">
@@ -445,6 +860,20 @@
             baseURL: '/api',
             timeout: 10000
         });
+        
+        // 请求拦截器：添加 token
+        api.interceptors.request.use(
+            config => {
+                const token = localStorage.getItem('token');
+                if (token) {
+                    config.headers['token'] = token;
+                }
+                return config;
+            },
+            error => {
+                return Promise.reject(error);
+            }
+        );
 
         // 响应拦截器
         api.interceptors.response.use(
@@ -459,6 +888,16 @@
                 }
             },
             error => {
+                // 401 未授权，跳转到登录页
+                if (error.response && error.response.status === 401) {
+                    ElMessage.error('登录已过期，请重新登录');
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('userId');
+                    setTimeout(() => {
+                        window.location.href = '/login.html';
+                    }, 1000);
+                    return Promise.reject(error);
+                }
                 // 只有在有响应数据时才显示错误消息，避免网络错误时重复提示
                 if (error.response && error.response.data) {
                     const res = error.response.data;
@@ -491,6 +930,64 @@
             getById: (id) => api.get(`/log/${id}`),
             delete: (id) => api.delete(`/log/${id}`)
         };
+        
+        const authApi = {
+            // 登出接口，参数与 controller 一致：token
+            logout: (token) => api.post('/login/logout', null, { params: { token } }),
+            // 获取当前用户接口，参数与 controller 一致：token
+            getCurrentUser: (token) => api.post('/login/current', null, { params: { token } })
+        };
+        
+        const userApi = {
+            getList: () => api.get('/user/list'),
+            getDetail: (userId) => api.get(`/user/${userId}`),
+            create: (data) => {
+                const formData = new URLSearchParams();
+                formData.append('username', data.username);
+                formData.append('password', data.password);
+                formData.append('email', data.email);
+                formData.append('roleId', data.roleId);
+                return api.post('/user', formData.toString(), {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+            },
+            update: (userId, data) => {
+                const formData = new URLSearchParams();
+                if (data.email) formData.append('email', data.email);
+                if (data.roleId) formData.append('roleId', data.roleId);
+                if (data.status !== undefined) formData.append('status', data.status);
+                return api.put(`/user/${userId}`, formData.toString(), {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+            },
+            delete: (userId) => api.delete(`/user/${userId}`),
+            updateStatus: (userId, status) => api.put(`/user/${userId}/status`, null, { params: { status } })
+        };
+        
+        const roleApi = {
+            getAll: () => api.get('/login/roles')
+        };
+        
+        const alertConfigApi = {
+            getAll: () => api.get('/alert/config'),
+            getByJobId: (jobId) => api.get(`/alert/config/job/${jobId}`),
+            save: (data) => {
+                const formData = new URLSearchParams();
+                formData.append('jobId', data.jobId);
+                formData.append('alertType', data.alertType);
+                formData.append('receiverEmail', data.receiverEmail);
+                formData.append('enabled', data.enabled);
+                return api.post('/alert/config', formData.toString(), {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+            },
+            delete: (id) => api.delete(`/alert/config/${id}`)
+        };
+        
+        const alertRecordApi = {
+            getAll: () => api.get('/alert/record'),
+            getByJobId: (jobId) => api.get(`/alert/record/job/${jobId}`)
+        };
 
         const app = createApp({
             setup() {
@@ -498,6 +995,13 @@
                 const loading = ref(false);
                 const jobList = ref([]);
                 const recentJobs = ref([]);
+                // 任务ID到任务信息的映射，用于根据jobId快速查找任务名称和任务组
+                const jobMap = ref(new Map());
+                const currentUser = reactive({
+                    username: '',
+                    userId: null,
+                    roleId: null  // 角色ID，用于判断是否显示用户管理tab
+                });
                 const stats = reactive({
                     total: 0,
                     running: 0,
@@ -560,6 +1064,383 @@
                     ]
                 };
 
+                // 告警配置相关
+                const alertConfigDialogVisible = ref(false);
+                const alertConfigSubmitting = ref(false);
+                const alertConfigFormRef = ref(null);
+                const alertConfigForm = reactive({
+                    jobId: null,
+                    jobName: '',
+                    alertType: 'EMAIL',
+                    receiverEmail: '',
+                    enabled: 1
+                });
+                
+                const alertConfigFormRules = {
+                    receiverEmail: [
+                        { required: true, message: '请输入接收人邮箱', trigger: 'blur' }
+                    ],
+                    alertType: [
+                        { required: true, message: '请选择告警类型', trigger: 'change' }
+                    ]
+                };
+                
+                // 显示告警配置对话框
+                const showAlertConfigDialog = async (row) => {
+                    alertConfigForm.jobId = row.id;
+                    alertConfigForm.jobName = row.jobName;
+                    alertConfigForm.alertType = 'EMAIL';
+                    alertConfigForm.receiverEmail = '';
+                    alertConfigForm.enabled = 1;
+                    
+                    // 加载已有的告警配置
+                    try {
+                        const configs = await alertConfigApi.getByJobId(row.id);
+                        if (configs && configs.length > 0) {
+                            const emailConfig = configs.find(c => c.alertType === 'EMAIL');
+                            if (emailConfig) {
+                                alertConfigForm.receiverEmail = emailConfig.receiverEmail || '';
+                                alertConfigForm.enabled = emailConfig.enabled || 1;
+                            }
+                        }
+                    } catch (error) {
+                        console.error('加载告警配置失败:', error);
+                    }
+                    
+                    alertConfigDialogVisible.value = true;
+                };
+                
+                // 提交告警配置
+                const submitAlertConfig = () => {
+                    alertConfigFormRef.value.validate(async (valid) => {
+                        if (valid) {
+                            alertConfigSubmitting.value = true;
+                            try {
+                                await alertConfigApi.save(alertConfigForm);
+                                ElMessage.success('告警配置保存成功');
+                                alertConfigDialogVisible.value = false;
+                            } catch (error) {
+                                // 错误已在拦截器中处理
+                            } finally {
+                                alertConfigSubmitting.value = false;
+                            }
+                        }
+                    });
+                };
+
+                // 告警管理相关
+                const alertActiveTab = ref('config');
+                const alertConfigLoading = ref(false);
+                const alertConfigList = ref([]);
+                const alertRecordLoading = ref(false);
+                const alertRecordList = ref([]);
+                const alertConfigFormDialogVisible = ref(false);
+                const alertConfigFormMode = ref('create');
+                const alertConfigFormSubmitting = ref(false);
+                const alertConfigFormFormRef = ref(null);
+                const alertConfigFormForm = reactive({
+                    id: null,
+                    jobId: null,
+                    alertType: 'EMAIL',
+                    receiverEmail: '',
+                    enabled: 1
+                });
+                
+                const alertConfigFormFormRules = {
+                    jobId: [
+                        { required: true, message: '请选择任务', trigger: 'change' }
+                    ],
+                    alertType: [
+                        { required: true, message: '请选择告警类型', trigger: 'change' }
+                    ],
+                    receiverEmail: [
+                        { required: true, message: '请输入接收人邮箱', trigger: 'blur' }
+                    ]
+                };
+                
+                // 加载告警配置列表
+                const loadAlertConfigList = async () => {
+                    alertConfigLoading.value = true;
+                    try {
+                        const configs = await alertConfigApi.getAll();
+                        alertConfigList.value = Array.isArray(configs) ? configs : [];
+                    } catch (error) {
+                        ElMessage.error('加载告警配置列表失败');
+                        alertConfigList.value = [];
+                    } finally {
+                        alertConfigLoading.value = false;
+                    }
+                };
+                
+                // 加载告警记录列表
+                const loadAlertRecordList = async () => {
+                    // 确保任务列表已加载，以便建立jobId到任务信息的映射
+                    if (jobMap.value.size === 0) {
+                        await loadJobList();
+                    }
+                    alertRecordLoading.value = true;
+                    try {
+                        const records = await alertRecordApi.getAll();
+                        alertRecordList.value = Array.isArray(records) ? records : [];
+                    } catch (error) {
+                        ElMessage.error('加载告警记录列表失败');
+                        alertRecordList.value = [];
+                    } finally {
+                        alertRecordLoading.value = false;
+                    }
+                };
+                
+                // 显示告警配置表单对话框
+                const showAlertConfigFormDialog = async (mode, row = null) => {
+                    alertConfigFormMode.value = mode;
+                    if (mode === 'create') {
+                        Object.assign(alertConfigFormForm, {
+                            id: null,
+                            jobId: null,
+                            alertType: 'EMAIL',
+                            receiverEmail: '',
+                            enabled: 1
+                        });
+                    } else if (mode === 'edit' && row) {
+                        Object.assign(alertConfigFormForm, {
+                            id: row.id,
+                            jobId: row.jobId,
+                            alertType: row.alertType,
+                            receiverEmail: row.receiverEmail,
+                            enabled: row.enabled
+                        });
+                    }
+                    alertConfigFormDialogVisible.value = true;
+                };
+                
+                // 提交告警配置表单
+                const submitAlertConfigForm = () => {
+                    alertConfigFormFormRef.value.validate(async (valid) => {
+                        if (valid) {
+                            alertConfigFormSubmitting.value = true;
+                            try {
+                                await alertConfigApi.save(alertConfigFormForm);
+                                ElMessage.success(alertConfigFormMode.value === 'create' ? '告警配置创建成功' : '告警配置更新成功');
+                                alertConfigFormDialogVisible.value = false;
+                                loadAlertConfigList();
+                            } catch (error) {
+                                // 错误已在拦截器中处理
+                            } finally {
+                                alertConfigFormSubmitting.value = false;
+                            }
+                        }
+                    });
+                };
+                
+                // 删除告警配置
+                const deleteAlertConfig = async (row) => {
+                    try {
+                        await ElMessageBox.confirm(
+                            `确定要删除任务ID为 ${row.jobId} 的告警配置吗？`,
+                            '确认删除',
+                            {
+                                confirmButtonText: '确定',
+                                cancelButtonText: '取消',
+                                type: 'warning'
+                            }
+                        );
+                        await alertConfigApi.delete(row.id);
+                        ElMessage.success('告警配置删除成功');
+                        loadAlertConfigList();
+                    } catch (error) {
+                        if (error !== 'cancel') {
+                            // 错误已在拦截器中处理
+                        }
+                    }
+                };
+                
+                // 获取告警状态文本
+                const getAlertStatusText = (status) => {
+                    const statusMap = {
+                        0: '待发送',
+                        1: '发送成功',
+                        2: '发送失败'
+                    };
+                    return statusMap[status] || '未知';
+                };
+                
+                // 获取告警状态类型
+                const getAlertStatusType = (status) => {
+                    const typeMap = {
+                        0: 'info',
+                        1: 'success',
+                        2: 'danger'
+                    };
+                    return typeMap[status] || 'info';
+                };
+                
+                // 处理告警Tab切换
+                const handleAlertTabChange = (tabName) => {
+                    if (tabName === 'config') {
+                        loadAlertConfigList();
+                    } else if (tabName === 'record') {
+                        loadAlertRecordList();
+                    }
+                };
+
+                // 用户管理相关
+                const userLoading = ref(false);
+                const userList = ref([]);
+                const roleList = ref([]);
+                const userFormDialogVisible = ref(false);
+                const userFormMode = ref('create');
+                const userSubmitting = ref(false);
+                const userFormRef = ref(null);
+                const userForm = reactive({
+                    id: null,
+                    username: '',
+                    password: '',
+                    email: '',
+                    roleId: null
+                });
+                
+                const userFormRules = {
+                    username: [
+                        { required: true, message: '请输入用户名', trigger: 'blur' },
+                        { min: 3, message: '用户名长度不能少于3位', trigger: 'blur' }
+                    ],
+                    password: [
+                        { required: true, message: '请输入密码', trigger: 'blur' },
+                        { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
+                    ],
+                    email: [
+                        { required: true, message: '请输入邮箱', trigger: 'blur' },
+                        { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
+                    ],
+                    roleId: [
+                        { required: true, message: '请选择角色', trigger: 'change' }
+                    ]
+                };
+                
+                // 加载角色列表
+                const loadRoleList = async () => {
+                    try {
+                        // 获取所有角色（包括管理员）
+                        const roles = await roleApi.getAll();
+                        roleList.value = Array.isArray(roles) ? roles : [];
+                    } catch (error) {
+                        console.error('加载角色列表失败:', error);
+                        roleList.value = [];
+                    }
+                };
+                
+                // 加载用户列表
+                const loadUserList = async () => {
+                    userLoading.value = true;
+                    try {
+                        const users = await userApi.getList();
+                        userList.value = Array.isArray(users) ? users : [];
+                    } catch (error) {
+                        ElMessage.error('加载用户列表失败');
+                        userList.value = [];
+                    } finally {
+                        userLoading.value = false;
+                    }
+                };
+                
+                // 显示用户表单对话框
+                const showUserFormDialog = (mode, row = null) => {
+                    userFormMode.value = mode;
+                    if (mode === 'create') {
+                        Object.assign(userForm, {
+                            id: null,
+                            username: '',
+                            password: '',
+                            email: '',
+                            roleId: null
+                        });
+                        loadRoleList();
+                    } else if (mode === 'edit' && row) {
+                        Object.assign(userForm, {
+                            id: row.id,
+                            username: row.username,
+                            password: '',
+                            email: row.email,
+                            roleId: row.roleId
+                        });
+                        loadRoleList();
+                    }
+                    userFormDialogVisible.value = true;
+                };
+                
+                // 提交用户表单
+                const submitUserForm = async () => {
+                    if (!userFormRef.value) return;
+                    await userFormRef.value.validate(async (valid) => {
+                        if (valid) {
+                            userSubmitting.value = true;
+                            try {
+                                if (userFormMode.value === 'create') {
+                                    await userApi.create(userForm);
+                                    ElMessage.success('用户创建成功');
+                                } else {
+                                    await userApi.update(userForm.id, {
+                                        email: userForm.email,
+                                        roleId: userForm.roleId
+                                    });
+                                    ElMessage.success('用户更新成功');
+                                }
+                                userFormDialogVisible.value = false;
+                                loadUserList();
+                            } catch (error) {
+                                // 错误已在拦截器中处理
+                            } finally {
+                                userSubmitting.value = false;
+                            }
+                        }
+                    });
+                };
+                
+                // 切换用户状态
+                const toggleUserStatus = async (row) => {
+                    try {
+                        const newStatus = row.status === 1 ? 0 : 1;
+                        await ElMessageBox.confirm(
+                            `确定要${newStatus === 1 ? '启用' : '禁用'}用户 "${row.username}" 吗？`,
+                            '确认操作',
+                            {
+                                confirmButtonText: '确定',
+                                cancelButtonText: '取消',
+                                type: 'warning'
+                            }
+                        );
+                        await userApi.updateStatus(row.id, newStatus);
+                        ElMessage.success('操作成功');
+                        loadUserList();
+                    } catch (error) {
+                        if (error !== 'cancel') {
+                            // 错误已在拦截器中处理
+                        }
+                    }
+                };
+                
+                // 删除用户
+                const deleteUser = async (row) => {
+                    try {
+                        await ElMessageBox.confirm(
+                            `确定要删除用户 "${row.username}" 吗？此操作不可恢复！`,
+                            '确认删除',
+                            {
+                                confirmButtonText: '确定',
+                                cancelButtonText: '取消',
+                                type: 'warning'
+                            }
+                        );
+                        await userApi.delete(row.id);
+                        ElMessage.success('用户删除成功');
+                        loadUserList();
+                    } catch (error) {
+                        if (error !== 'cancel') {
+                            // 错误已在拦截器中处理
+                        }
+                    }
+                };
+                
                 // 导航
                 const navigate = (page) => {
                     currentPage.value = page;
@@ -569,6 +1450,11 @@
                         loadDashboard();
                     } else if (page === 'log') {
                         loadLogList();
+                    } else if (page === 'user') {
+                        loadUserList();
+                    } else if (page === 'alert') {
+                        loadAlertConfigList();
+                        loadAlertRecordList();
                     }
                 };
 
@@ -578,11 +1464,62 @@
                     try {
                         const jobs = await jobApi.getList();
                         jobList.value = Array.isArray(jobs) ? jobs : [];
+                        // 建立任务ID到任务信息的映射
+                        const map = new Map();
+                        if (Array.isArray(jobs)) {
+                            jobs.forEach(job => {
+                                if (job.id) {
+                                    map.set(job.id, job);
+                                }
+                            });
+                        }
+                        jobMap.value = map;
                     } catch (error) {
+                        // 错误已在拦截器中处理
                         console.error('加载任务列表失败:', error);
                         jobList.value = [];
+                        jobMap.value = new Map();
                     } finally {
                         loading.value = false;
+                    }
+                };
+                
+                // 根据任务ID获取任务名称
+                const getJobName = (jobId) => {
+                    if (!jobId) return null;
+                    const job = jobMap.value.get(jobId);
+                    return job ? job.jobName : null;
+                };
+                
+                // 根据任务ID获取任务组
+                const getJobGroup = (jobId) => {
+                    if (!jobId) return null;
+                    const job = jobMap.value.get(jobId);
+                    return job ? job.jobGroup : null;
+                };
+                
+                // 获取任务状态类型（用于el-tag的type属性）
+                const getJobStatusType = (status) => {
+                    if (status === 1) return 'success';  // 运行中
+                    if (status === 2) return 'danger';   // 失败
+                    return 'info';                       // 暂停
+                };
+                
+                // 获取任务状态文本
+                const getJobStatusText = (status) => {
+                    if (status === 1) return '运行中';
+                    if (status === 2) return '失败';
+                    return '已暂停';
+                };
+                
+                // 恢复失败的任务
+                const resumeFailedJob = async (row) => {
+                    try {
+                        await jobApi.resume(row.jobName, row.jobGroup);
+                        ElMessage.success('任务已恢复');
+                        await loadJobList();
+                    } catch (error) {
+                        // 错误已在拦截器中处理
                     }
                 };
 
@@ -595,11 +1532,21 @@
                         stats.total = jobArray.length;
                         stats.running = jobArray.filter(job => job.status === 1).length;
                         stats.paused = jobArray.filter(job => job.status === 0).length;
-                        stats.failed = 0;
+                        stats.failed = jobArray.filter(job => job.status === 2).length;
                         recentJobs.value = jobArray.slice(0, 5).map(job => ({
                             ...job,
                             updateTime: job.updateTime || '-'
                         }));
+                        // 更新任务映射
+                        const map = new Map();
+                        if (Array.isArray(jobs)) {
+                            jobs.forEach(job => {
+                                if (job.id) {
+                                    map.set(job.id, job);
+                                }
+                            });
+                        }
+                        jobMap.value = map;
                     } catch (error) {
                         // 错误已在拦截器中处理，这里不重复提示
                         console.error('加载仪表盘数据失败:', error);
@@ -609,6 +1556,7 @@
                         stats.paused = 0;
                         stats.failed = 0;
                         recentJobs.value = [];
+                        jobMap.value = new Map();
                     }
                 };
 
@@ -742,6 +1690,10 @@
 
                 // 加载日志列表
                 const loadLogList = async () => {
+                    // 确保任务列表已加载，以便建立jobId到任务信息的映射
+                    if (jobMap.value.size === 0) {
+                        await loadJobList();
+                    }
                     logLoading.value = true;
                     try {
                         const result = await logApi.getList(logPageNum.value, logPageSize.value);
@@ -809,10 +1761,70 @@
                     // 如果是对象，尝试转换为字符串
                     return dateTime.toString();
                 };
+                
+                // 检查登录状态
+                const checkLoginStatus = async () => {
+                    const token = localStorage.getItem('token');
+                    if (!token) {
+                        return Promise.reject(new Error('未登录'));
+                    }
+                    try {
+                        const userInfo = await authApi.getCurrentUser(token);
+                        if (userInfo) {
+                            currentUser.username = userInfo.username || '用户';
+                            currentUser.userId = userInfo.id;
+                            currentUser.roleId = userInfo.roleId; // 设置角色ID，用于显示用户管理tab
+                            return Promise.resolve();
+                        } else {
+                            return Promise.reject(new Error('获取用户信息失败'));
+                        }
+                    } catch (error) {
+                        console.error('获取用户信息失败:', error);
+                        // 如果获取用户信息失败，清除 token
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('userId');
+                        return Promise.reject(error);
+                    }
+                };
+                
+                // 登出，参数与 controller 一致：token
+                const handleLogout = async () => {
+                    try {
+                        const token = localStorage.getItem('token');
+                        if (token) {
+                            // 调用登出接口，参数与 controller 一致：token
+                            await authApi.logout(token);
+                        }
+                    } catch (error) {
+                        console.error('登出失败:', error);
+                    } finally {
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('userId');
+                        ElMessage.success('已退出登录');
+                        setTimeout(() => {
+                            window.location.href = '/login.html';
+                        }, 500);
+                    }
+                };
 
                 onMounted(() => {
-                    loadDashboard();
-
+                    // 先检查登录状态，如果未登录立即跳转
+                    const token = localStorage.getItem('token');
+                    if (!token) {
+                        window.location.href = '/login.html';
+                        return;
+                    }
+                    // 检查登录状态并加载数据
+                    checkLoginStatus().then(() => {
+                        // 登录验证通过后显示页面
+                        document.getElementById('app').style.display = 'block';
+                        loadDashboard();
+                    }).catch(() => {
+                        // 验证失败，跳转到登录页
+                        window.location.href = '/login.html';
+                    });
+                    
+                    // 修复 label for 属性匹配问题
                     setTimeout(() => {
                         const formItems = document.querySelectorAll('.el-form-item');
                         formItems.forEach((item, index) => {
@@ -837,6 +1849,7 @@
                     loading,
                     jobList,
                     recentJobs,
+                    currentUser,
                     stats,
                     formDialogVisible,
                     formMode,
@@ -847,6 +1860,11 @@
                     jobClassOptions,
                     navigate,
                     loadJobList,
+                    getJobName,
+                    getJobGroup,
+                    getJobStatusType,
+                    getJobStatusText,
+                    resumeFailedJob,
                     showFormDialog,
                     submitForm,
                     toggleStatus,
@@ -864,7 +1882,51 @@
                     handleLogPageChange,
                     viewLogDetail,
                     deleteLog,
-                    formatDateTime
+                    userLoading,
+                    userList,
+                    roleList,
+                    userFormDialogVisible,
+                    userFormMode,
+                    userSubmitting,
+                    userFormRef,
+                    userForm,
+                    userFormRules,
+                    loadUserList,
+                    showUserFormDialog,
+                    submitUserForm,
+                    toggleUserStatus,
+                    deleteUser,
+                    viewLogDetail,
+                    deleteLog,
+                    formatDateTime,
+                    checkLoginStatus,
+                    handleLogout,
+                    alertConfigDialogVisible,
+                    alertConfigSubmitting,
+                    alertConfigFormRef,
+                    alertConfigForm,
+                    alertConfigFormRules,
+                    showAlertConfigDialog,
+                    submitAlertConfig,
+                    alertActiveTab,
+                    alertConfigLoading,
+                    alertConfigList,
+                    alertRecordLoading,
+                    alertRecordList,
+                    alertConfigFormDialogVisible,
+                    alertConfigFormMode,
+                    alertConfigFormSubmitting,
+                    alertConfigFormFormRef,
+                    alertConfigFormForm,
+                    alertConfigFormFormRules,
+                    loadAlertConfigList,
+                    loadAlertRecordList,
+                    showAlertConfigFormDialog,
+                    submitAlertConfigForm,
+                    deleteAlertConfig,
+                    getAlertStatusText,
+                    getAlertStatusType,
+                    handleAlertTabChange
                 };
             }
         });

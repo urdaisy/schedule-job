@@ -1,13 +1,7 @@
 package com.schedule.job.admin.job;
 
-import com.schedule.job.admin.repository.JobLogRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.quartz.Scheduler;
-import org.quartz.SimpleTrigger;
-import org.quartz.TriggerBuilder;
-import org.quartz.TriggerKey;
-import org.quartz.SimpleScheduleBuilder;
-import org.quartz.JobKey;
+import org.quartz.*;
 
 import java.util.Date;
 
@@ -16,19 +10,21 @@ import com.schedule.job.common.exception.BusinessException;
 
 /**
  * 数据处理任务
- * 用于执行数据清洗、转换、统计等任务，参数格式：operation|sql(可选)
+ * 用于执行数据清洗、转换、统计等任务
+ * 
+ * 参数格式：operation|sql(可选)
  * 操作类型：
  * - CLEAN: 数据清洗
  * - TRANSFORM: 数据转换
  * - STATISTICS: 数据统计
+ * 
+ * 示例：
+ * - 数据清洗：CLEAN|
+ * - 数据统计：STATISTICS|SELECT COUNT(*) FROM table
+ *
  */
 @Slf4j
 public class DataProcessJob extends BaseJob {
-
-    public DataProcessJob(JobLogRepository jobLogRepository) {
-        super(jobLogRepository);
-    }
-
     @Override
     protected void executeInternal(String jobName, String jobParam) throws Exception {
         log.info("执行数据处理任务：{}，参数：{}", jobName, jobParam);
@@ -63,7 +59,8 @@ public class DataProcessJob extends BaseJob {
      */
     private void executeDataClean(String jobName, String sql) throws Exception {
         log.info("执行数据清洗：{}", jobName);
-        // TODO: 实现数据清洗逻辑，清理脏数据、去重、格式化等
+        // TODO: 实现数据清洗逻辑
+        // 例如：清理脏数据、去重、格式化等
         Thread.sleep(500); // 模拟处理时间
         log.info("数据清洗完成");
     }
@@ -74,6 +71,7 @@ public class DataProcessJob extends BaseJob {
     private void executeDataTransform(String jobName, String sql) throws Exception {
         log.info("执行数据转换：{}", jobName);
         // TODO: 实现数据转换逻辑
+        // 例如：格式转换、字段映射、数据聚合等
         Thread.sleep(500);
         log.info("数据转换完成");
     }
@@ -83,13 +81,16 @@ public class DataProcessJob extends BaseJob {
      */
     private void executeStatistics(String jobName, String sql) throws Exception {
         log.info("执行数据统计：{}", jobName);
-        // TODO: 实现数据统计逻辑，计算总数、平均值、最大值等
+        // TODO: 实现数据统计逻辑
+        // 例如：计算总数、平均值、最大值等
         Thread.sleep(500);
         log.info("数据统计完成");
     }
 
     @Override
-    protected void scheduleRetryJob(Scheduler scheduler, String jobName, String jobGroup, int retryInterval) throws Exception {
+    protected void scheduleRetryJob(Scheduler scheduler, String jobName, String jobGroup, 
+                                   int retryInterval, int nextRetryCount, int maxRetryCount,
+                                   Long jobId, String jobParam) throws Exception {
         if (retryInterval <= 0) {
             retryInterval = 60;
             log.warn("重试间隔无效，使用默认值60秒");
@@ -104,11 +105,25 @@ public class DataProcessJob extends BaseJob {
             throw new BusinessException(JOB_RETRY_FAILED, "原始任务不存在，无法创建重试任务");
         }
 
+        // 获取原始JobDetail，以便复制JobDataMap
+        JobDetail originalJobDetail = scheduler.getJobDetail(jobKey);
+        if (originalJobDetail == null) {
+            log.error("无法获取原始任务详情：jobName={}, jobGroup={}", jobName, jobGroup);
+            throw new BusinessException(JOB_RETRY_FAILED, "无法获取原始任务详情");
+        }
+        
+        // 创建新的JobDataMap，包含重试信息
+        JobDataMap retryDataMap = new JobDataMap(originalJobDetail.getJobDataMap());
+        retryDataMap.put("currentRetryCount", nextRetryCount);
+        retryDataMap.put("maxRetryCount", maxRetryCount);
+        retryDataMap.put("retryInterval", retryInterval);
+
         Date startTime = new Date(System.currentTimeMillis() + retryInterval * 1000L);
 
         SimpleTrigger retryTrigger = TriggerBuilder.newTrigger()
                 .withIdentity(triggerKey)
                 .forJob(jobKey)
+                .usingJobData(retryDataMap)
                 .startAt(startTime)
                 .withSchedule(SimpleScheduleBuilder.simpleSchedule()
                         .withRepeatCount(0)
@@ -117,7 +132,7 @@ public class DataProcessJob extends BaseJob {
 
         scheduler.scheduleJob(retryTrigger);
 
-        log.info("创建数据处理任务重试成功：jobName={}, jobGroup={}, 将在{}秒后执行",
-                jobName, jobGroup, retryInterval);
+        log.info("创建数据处理任务重试成功：jobName={}, jobGroup={}, 第{}次重试将在{}秒后执行",
+                jobName, jobGroup, nextRetryCount, retryInterval);
     }
 }
