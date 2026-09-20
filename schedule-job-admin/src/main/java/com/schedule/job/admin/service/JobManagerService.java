@@ -11,6 +11,7 @@ import org.quartz.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
  import java.text.ParseException;
 import java.time.LocalDateTime;
@@ -74,7 +75,7 @@ public class JobManagerService {
             jobDataMap.put("jobGroup", savedJobInfo.getJobGroup());
             // 设置重试相关参数
             jobDataMap.put("currentRetryCount", 0); // 初始重试次数为0
-            if (savedJobInfo.getRetryCount() != null && savedJobInfo.getRetryCount() > 0) {
+            if (savedJobInfo.getRetryCount() != null && savedJobInfo.getRetryCount() >= 0) {
                 jobDataMap.put("maxRetryCount", savedJobInfo.getRetryCount());
             } else {
                 jobDataMap.put("maxRetryCount", 3); // 默认最大重试3次
@@ -206,13 +207,15 @@ public class JobManagerService {
             oldJob.setCronExpression(jobInfo.getCronExpression()); // 更新cron表达式
             oldJob.setUpdateTime(LocalDateTime.now());
             JobInfo updatedJob = jobInfoRepository.saveByEntity(oldJob);
+            // retryCount 目前只存在于内存/JobDataMap，保存 DB 后需从请求回填
+            updatedJob.setRetryCount(jobInfo.getRetryCount());
 
             try {
                 // 如果key(jobName和jobGroup)都有变化，或者jobClassName有变化，则需要重新注册
                 boolean isJobClassNameChanged = !jobClassName.equals(oldJobClassName);
                 if (isJobKeyChanged || isJobClassNameChanged) {
                     if (isJobKeyChanged) {
-                        scheduler.deleteJob(JobKey.jobKey(oldJob.getJobName(), oldJob.getJobGroup()));
+                        scheduler.deleteJob(JobKey.jobKey(originalJobName, originalJobGroup));
                     } else {
                         // 如果只是jobClassName变化，需要删除旧任务并重新注册
                         scheduler.deleteJob(JobKey.jobKey(updatedJob.getJobName(), updatedJob.getJobGroup()));
@@ -223,19 +226,7 @@ public class JobManagerService {
                             .withDescription(updatedJob.getDescription())
                             .storeDurably() // 无触发器时也保留任务
                             .build();
-                    // 设置任务参数（包括重试配置）
-                    JobDataMap newJobDataMap = newJobDetail.getJobDataMap();
-                    newJobDataMap.put("jobName", updatedJob.getJobName());
-                    newJobDataMap.put("jobParam", updatedJob.getJobParam());
-                    newJobDataMap.put("jobId", updatedJob.getId());
-                    newJobDataMap.put("jobGroup", updatedJob.getJobGroup());
-                    newJobDataMap.put("currentRetryCount", 0);
-                    if (updatedJob.getRetryCount() != null && updatedJob.getRetryCount() > 0) {
-                        newJobDataMap.put("maxRetryCount", updatedJob.getRetryCount());
-                    } else {
-                        newJobDataMap.put("maxRetryCount", 3);
-                    }
-                    newJobDataMap.put("retryInterval", 60);
+                    fillJobDataMap(newJobDetail.getJobDataMap(), updatedJob);
                     CronTrigger newTrigger = TriggerBuilder.newTrigger()
                             .withIdentity(updatedJob.getJobName() + "_trigger", updatedJob.getJobGroup())
                             .withSchedule(CronScheduleBuilder.cronSchedule(updatedJob.getCronExpression()))
@@ -247,10 +238,10 @@ public class JobManagerService {
                         pauseJob(updatedJob.getJobName(), updatedJob.getJobGroup());
                     }
                 } else {
-                    // 更新cron表达式
-                    // 注意：如果jobName或jobGroup没有变化，使用原始的jobName和jobGroup来查找触发器
-                    // 因为Quartz中的触发器是用原始名称注册的
+                    // key/类未变：同步 cron，并把 jobParam 等写回 Quartz JobDataMap
+                    // （此前只更新了 DB，立即执行仍读到旧参数，无法改成“异常任务”测告警）
                     updateJobCron(originalJobName, originalJobGroup, jobInfo.getCronExpression());
+                    syncJobDataMap(originalJobName, originalJobGroup, updatedJob);
                 }
                 log.info("任务更新成功: jobId={}, newJobName={}", updatedJob.getId(), updatedJob.getJobName());
             } catch (SchedulerException e) {
@@ -312,6 +303,37 @@ public class JobManagerService {
     }
 
     /**
+     * 将最新 jobParam / 重试配置同步到已存在的 Quartz JobDataMap。
+     */
+    private void syncJobDataMap(String jobName, String jobGroup, JobInfo updatedJob) throws SchedulerException {
+        JobKey jobKey = JobKey.jobKey(jobName, jobGroup);
+        JobDetail jobDetail = scheduler.getJobDetail(jobKey);
+        if (jobDetail == null) {
+            log.warn("同步 JobDataMap 失败，Quartz 任务不存在: jobName={}, jobGroup={}", jobName, jobGroup);
+            return;
+        }
+        fillJobDataMap(jobDetail.getJobDataMap(), updatedJob);
+        // replace=true：用带新 JobDataMap 的 JobDetail 覆盖
+        scheduler.addJob(jobDetail, true);
+        log.info("已同步 Quartz JobDataMap: jobName={}, jobGroup={}, jobParam={}",
+                jobName, jobGroup, updatedJob.getJobParam());
+    }
+
+    private void fillJobDataMap(JobDataMap jobDataMap, JobInfo jobInfo) {
+        jobDataMap.put("jobName", jobInfo.getJobName());
+        jobDataMap.put("jobGroup", jobInfo.getJobGroup());
+        jobDataMap.put("jobParam", jobInfo.getJobParam());
+        jobDataMap.put("jobId", jobInfo.getId());
+        jobDataMap.put("currentRetryCount", 0);
+        if (jobInfo.getRetryCount() != null && jobInfo.getRetryCount() >= 0) {
+            jobDataMap.put("maxRetryCount", jobInfo.getRetryCount());
+        } else {
+            jobDataMap.put("maxRetryCount", 3);
+        }
+        jobDataMap.put("retryInterval", 60);
+    }
+
+    /**
      * 删除任务
      */
     @Transactional(rollbackFor = Exception.class)
@@ -348,10 +370,23 @@ public class JobManagerService {
      * 立即执行任务，不需要事务管理，无需回滚
      */
     public void runJobNow(String jobName, String jobGroup) throws SchedulerException {
+        runJobNow(jobName, jobGroup, null);
+    }
+
+    /**
+     * 立即执行任务，可选覆盖本次执行的 jobParam。
+     */
+    public void runJobNow(String jobName, String jobGroup, String jobParam) throws SchedulerException {
         jobInfoRepository.findByJobNameAndJobGroup(jobName, jobGroup)
                 .orElseThrow(() -> new BusinessException(BusinessExceptionCode.JOB_NOT_FOUND));
         JobKey jobKey = JobKey.jobKey(jobName, jobGroup);
-        scheduler.triggerJob(jobKey);
+        if (StringUtils.hasText(jobParam)) {
+            JobDataMap overrideDataMap = new JobDataMap();
+            overrideDataMap.put("jobParam", jobParam);
+            scheduler.triggerJob(jobKey, overrideDataMap);
+        } else {
+            scheduler.triggerJob(jobKey);
+        }
         log.info("任务立即执行成功: jobName={}, jobGroup={}", jobName, jobGroup);
     }
 

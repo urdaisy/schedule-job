@@ -71,6 +71,13 @@
                     <target>21</target>
                     <encoding>UTF-8</encoding>
                     <parameters>true</parameters>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
         </plugins>
@@ -97,7 +104,7 @@
         <jacoco.version>0.8.11</jacoco.version>
         <jmockit.version>1.52.0-jdk21</jmockit.version>
         <xapicommon.version>1.7.20</xapicommon.version>
-        <lombok.version>1.18.30</lombok.version>
+        <lombok.version>1.18.38</lombok.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <fltsearchcommon.version>0.3.5</fltsearchcommon.version>

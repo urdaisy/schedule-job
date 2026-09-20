@@ -1,12 +1,14 @@
 package com.schedule.job.admin.controller;
 
 import com.schedule.job.admin.job.JobInfo;
+import com.schedule.job.admin.mq.rabbit.RabbitProducer;
 import com.schedule.job.admin.service.JobManagerService;
 import com.schedule.job.common.enums.ResultCode;
 import com.schedule.job.common.exception.BusinessException;
 import com.schedule.job.common.exception.Result;
 import com.schedule.job.security.annotation.RequirePermission;
 import io.micrometer.common.util.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.annotation.Resource;
 import org.quartz.SchedulerException;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +22,9 @@ public class JobController {
 
     @Resource
     private JobManagerService jobManagerService;
+
+    @Autowired(required = false)
+    private RabbitProducer rabbitProducer;
 
     /**
      * 创建任务
@@ -83,6 +88,24 @@ public class JobController {
     public Result<String> runJobNow(@RequestParam String jobName, @RequestParam String jobGroup) throws SchedulerException {
         jobManagerService.runJobNow(jobName, jobGroup);
         return Result.success("任务已触发执行");
+    }
+
+    /**
+     * 通过 RabbitMQ 发送任务触发消息，演示“消息驱动任务执行”。
+     */
+    @PostMapping("/run-by-message")
+    @RequirePermission("job:execute")
+    public Result<String> runJobByMessage(@RequestParam String jobName,
+                                          @RequestParam String jobGroup,
+                                          @RequestParam(required = false) String jobParam) {
+        if (StringUtils.isEmpty(jobName) || StringUtils.isEmpty(jobGroup)) {
+            return Result.error(ResultCode.PARAM_ERROR, "任务名称和任务组不能为空");
+        }
+        if (rabbitProducer == null) {
+            return Result.error(ResultCode.ERROR, "MQ练习未开启，无法发送任务触发消息");
+        }
+        rabbitProducer.sendJobTriggerMessage(jobName, jobGroup, jobParam);
+        return Result.success("任务触发消息已发送");
     }
 
     /**

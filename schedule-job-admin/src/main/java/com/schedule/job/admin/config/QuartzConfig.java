@@ -11,7 +11,7 @@ import java.io.IOException;
 @Configuration
 public class QuartzConfig {
     /**
-     * 配置 SchedulerFactoryBean 核心调度器
+     * 配置 SchedulerFactoryBean：核心调度器（注入上面的quartzDataSource Bean）
      */
     @Bean
     public SchedulerFactoryBean schedulerFactoryBean() throws IOException {

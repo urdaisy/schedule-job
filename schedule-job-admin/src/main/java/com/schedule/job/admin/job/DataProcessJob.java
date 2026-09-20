@@ -21,7 +21,6 @@ import com.schedule.job.common.exception.BusinessException;
  * 示例：
  * - 数据清洗：CLEAN|
  * - 数据统计：STATISTICS|SELECT COUNT(*) FROM table
- *
  */
 @Slf4j
 public class DataProcessJob extends BaseJob {

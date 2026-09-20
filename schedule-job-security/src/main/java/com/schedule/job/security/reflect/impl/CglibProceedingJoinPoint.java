@@ -25,6 +25,7 @@ public class CglibProceedingJoinPoint implements ProceedingJoinPoint {
 
     @Override
     public Object proceed() throws Throwable {
+        // 使用 proxy 执行：代理在创建时已从 target 复制了注入字段，故 invokeSuper(proxy, args) 时 this.xxx 可用
         return methodProxy.invokeSuper(proxy, args);
     }
 

@@ -11,7 +11,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 手写简易连接池（核心：连接复用+线程安全）
+ * 手写简易连接池
+ * 核心：连接复用+线程安全
  */
 @Slf4j
 public class JdbcClient {

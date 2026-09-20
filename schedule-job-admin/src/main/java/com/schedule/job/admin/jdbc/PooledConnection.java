@@ -12,7 +12,7 @@ import java.util.concurrent.Executor;
  */
 public class PooledConnection implements Connection {
     private final Connection realConnection;
-    private final boolean isQuartzConnection;
+    private final boolean isQuartzConnection; // 标识是否为Quartz连接
     private volatile boolean isClosed = false;
 
     public PooledConnection(Connection realConnection, boolean isQuartzConnection) {

@@ -1,5 +1,6 @@
 package com.schedule.job.admin.job;
 
+import com.schedule.job.admin.mq.rabbit.RabbitProducer;
 import com.schedule.job.admin.repository.JobLogRepository;
 import com.schedule.job.admin.repository.JobInfoRepository;
 import com.schedule.job.admin.service.JobManagerService;
@@ -22,7 +23,7 @@ public abstract class BaseJob implements Job {
     protected AlertService alertService;
     protected JobInfoRepository jobInfoRepository;
     protected JobManagerService jobManagerService;
-    
+    protected RabbitProducer rabbitProducer;
     /**
      * 无参构造函数，供 Quartz 反射创建实例使用
      * JobLogRepository 和 AlertService 通过 com.schedule.job.admin.config.ApplicationContextHolder 延迟获取
@@ -45,24 +46,7 @@ public abstract class BaseJob implements Job {
         }
         return jobLogRepository;
     }
-    
-    /**
-     * 获取 AlertService（延迟初始化）
-     * @return AlertService 实例
-     */
-    protected AlertService getAlertService() {
-        if (alertService == null) {
-            try {
-                ApplicationContext context = ApplicationContextHolder.getApplicationContext();
-                alertService = context.getBean(AlertService.class);
-                log.debug("通过 com.schedule.job.admin.config.ApplicationContextHolder 获取 AlertService 成功");
-            } catch (Exception e) {
-                log.warn("获取 AlertService 失败，告警功能将不可用", e);
-            }
-        }
-        return alertService;
-    }
-    
+
     /**
      * 获取 JobInfoRepository（延迟初始化）
      * @return JobInfoRepository 实例
@@ -91,10 +75,35 @@ public abstract class BaseJob implements Job {
                 jobManagerService = context.getBean(JobManagerService.class);
                 log.debug("通过 com.schedule.job.admin.config.ApplicationContextHolder 获取 JobManagerService 成功");
             } catch (Exception e) {
-                log.warn("获取 JobManagerService 失败，无法暂停任务", e);
+                log.warn(" JobManagerService 失败，无法暂停任务", e);
             }
         }
         return jobManagerService;
+    }
+
+    protected RabbitProducer getRabbitProducer() {
+        if (rabbitProducer == null) {
+            try {
+                ApplicationContext context = ApplicationContextHolder.getApplicationContext();
+                rabbitProducer = context.getBean(RabbitProducer.class);
+                log.debug("通过 com.schedule.job.admin.config.ApplicationContextHolder 获取 RabbitTemplate 成功");
+            } catch (Exception e) {
+                log.warn("获取 RabbitProducer 失败，当前环境可能未开启 MQ 练习", e);
+            }
+        }
+        return rabbitProducer;
+    }
+
+    protected void sendAlertMessageIfPossible(Long jobId, Long jobLogId, String errorMsg) {
+        if (jobId == null || jobLogId == null) {
+            return;
+        }
+        RabbitProducer producer = getRabbitProducer();
+        if (producer == null) {
+            log.warn("RabbitProducer 未启用，跳过发送失败告警消息：jobId={}, jobLogId={}", jobId, jobLogId);
+            return;
+        }
+        producer.sendAlertMessage(jobId, jobLogId, errorMsg);
     }
     
     /**
@@ -215,7 +224,7 @@ public abstract class BaseJob implements Job {
             
             log.error("任务[{}]执行失败，当前重试次数：{}/{}，错误信息：{}", 
                     jobName, currentRetryCount, maxRetryCount, errorMsg, e);
-            
+            rabbitProducer = getRabbitProducer();
             // 检查是否还有重试机会
             if (currentRetryCount < maxRetryCount) {
                 // 记录失败日志（标记为重试中）
@@ -241,10 +250,8 @@ public abstract class BaseJob implements Job {
                     Long jobLogId = saveJobLog(jobId, triggerTime, executeTime, duration, 1,
                             "执行失败且重试调度失败：" + errorMsg + "，重试调度异常：" + retryException.getMessage(), 
                             currentRetryCount);
-                    // 触发告警
-                    if (jobId != null && jobLogId != null) {
-                        triggerAlert(jobId, jobLogId, errorMsg + "，重试调度异常：" + retryException.getMessage());
-                    }
+                    // 触发告警-消息队列
+                    sendAlertMessageIfPossible(jobId, jobLogId, errorMsg + "，重试调度异常：" + retryException.getMessage());
                 }
             } else {
                 // 已达到最大重试次数，记录最终失败日志
@@ -253,9 +260,7 @@ public abstract class BaseJob implements Job {
                 log.error("任务[{}]执行失败，已达到最大重试次数{}，不再重试", jobName, maxRetryCount);
                 
                 // 触发告警（仅在最终失败时触发，避免重试过程中重复告警）
-                if (jobId != null && jobLogId != null) {
-                    triggerAlert(jobId, jobLogId, errorMsg);
-                }
+                sendAlertMessageIfPossible(jobId, jobLogId, errorMsg);
                 
                 // 达到最大重试次数后，标记任务为失败状态，并暂停调度
                 try {
@@ -328,25 +333,6 @@ public abstract class BaseJob implements Job {
         } catch (Exception e) {
             log.error("保存任务执行日志失败，jobId={}", jobId, e);
             return null;
-        }
-    }
-    
-    /**
-     * 触发告警
-     * @param jobId 任务ID
-     * @param jobLogId 任务日志ID
-     * @param errorMsg 错误信息
-     */
-    protected void triggerAlert(Long jobId, Long jobLogId, String errorMsg) {
-        try {
-            AlertService service = getAlertService();
-            if (service == null) {
-                log.debug("AlertService未初始化，无法触发告警，jobId={}", jobId);
-                return;
-            }
-            service.triggerAlert(jobId, jobLogId, errorMsg);
-        } catch (Exception e) {
-            log.error("触发告警失败，jobId={}, jobLogId={}", jobId, jobLogId, e);
         }
     }
 }

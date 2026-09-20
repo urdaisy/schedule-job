@@ -1,5 +1,7 @@
 package com.schedule.job.common.enums;
 
+import lombok.Getter;
+
 public enum ResultCode {
     SUCCESS(200, "操作成功"),
     ERROR(500, "操作失败"),

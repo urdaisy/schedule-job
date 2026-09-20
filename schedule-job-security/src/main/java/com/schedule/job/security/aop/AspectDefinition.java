@@ -89,6 +89,7 @@ public class AspectDefinition {
             String annotationClassName = expression.substring(start, end).trim();
             Class<?> annotationClass = Class.forName(annotationClassName);
 
+            // 检查方法是否有该注解
             return method.isAnnotationPresent((Class<? extends Annotation>) annotationClass);
         } catch (Exception e) {
             return false;

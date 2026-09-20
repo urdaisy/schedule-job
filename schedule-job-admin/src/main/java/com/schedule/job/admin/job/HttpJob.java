@@ -22,7 +22,6 @@ import static com.schedule.job.common.enums.BusinessExceptionCode.JOB_RETRY_FAIL
  * 示例：
  * - GET请求：https://api.example.com/endpoint|GET|
  * - POST请求：https://api.example.com/endpoint|POST|{"key":"value"}
- *
  */
 @Slf4j
 public class HttpJob extends BaseJob {

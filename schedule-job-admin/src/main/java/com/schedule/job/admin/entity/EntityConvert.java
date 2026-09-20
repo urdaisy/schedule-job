@@ -85,6 +85,9 @@ public class EntityConvert {
         return jobLog;
     }
 
+    /**
+     * 别名方法，保持与现有代码的兼容性
+     */
     public static JobLog convertToLog(JobLogEntity jobLogEntity) {
         return convertToLogDomain(jobLogEntity);
     }

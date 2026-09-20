@@ -1,5 +1,6 @@
 package com.schedule.job.admin.config;
 
+import com.schedule.job.admin.mq.rabbit.RabbitProducer;
 import com.schedule.job.security.domain.RoleInfo;
 import com.schedule.job.security.domain.UserInfo;
 import com.schedule.job.security.manager.UserManager;
@@ -28,6 +29,9 @@ public class InitDataConfig implements CommandLineRunner {
     
     @Autowired
     private RoleInfoRepository roleInfoRepository;
+
+    @Autowired(required = false)
+    private RabbitProducer rabbitProducer;
     
     @Override
     public void run(String... args) throws Exception {
@@ -97,6 +101,12 @@ public class InitDataConfig implements CommandLineRunner {
             } else {
                 log.info("普通用户角色已存在: {}", userRole.get().getRoleName());
             }
+            if (rabbitProducer != null) {
+                rabbitProducer.publishTestMessage("[init roles]: send a rabbit message");
+            } else {
+                log.info("MQ练习未开启，跳过启动测试消息");
+            }
+
         } catch (Exception e) {
             log.error("检查角色数据失败", e);
         }

@@ -26,6 +26,9 @@ public class AuthService {
     
     @Autowired
     private UserSessionRepository userSessionRepository;
+    
+    @Autowired
+    private UserManager userManager;
 
     /**
      * 使用token做认证

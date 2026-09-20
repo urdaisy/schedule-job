@@ -7,6 +7,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 告警记录实体
+ */
 @Data
 @Entity(name = "sys_job_alert_record")
 public class AlertRecordEntity {
