@@ -7,8 +7,12 @@ import org.springframework.context.ApplicationContextAware;
 
 import java.io.File;
 import java.lang.reflect.Method;
+import java.net.JarURLConnection;
 import java.net.URL;
 import java.util.*;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.stream.Stream;
 
 /**
  * 切面扫描器
@@ -43,15 +47,19 @@ public class AspectScanner implements ApplicationContextAware {
     // 解析单个切面类
     private AspectDefinition parseAspect(Class<?> aspectClass) {
         Object aspectInstance = createAspectInstance(aspectClass);
+
         // 解析切点方法（@Pointcut）
         Map<String, String> pointcuts = parsePointcuts(aspectClass);
+
         // 解析通知方法（@Before、@After、@Around）
         List<AdviceDefinition> advices = parseAdvices(aspectClass, pointcuts);
+
         // 获取优先级
         int order = 0;
         if (aspectClass.isAnnotationPresent(Order.class)) {
             order = aspectClass.getAnnotation(Order.class).value();
         }
+
         // 构建 AspectDefinition（注意：这里需要从通知中提取切点表达式，或者使用默认的）
         String pointcutExpression = advices.isEmpty() ? "" : advices.get(0).getPointcutExpression();
         AspectDefinition aspectDefinition = new AspectDefinition();
@@ -59,25 +67,50 @@ public class AspectScanner implements ApplicationContextAware {
         aspectDefinition.setPointCutExpression(pointcutExpression);
         aspectDefinition.setAdvices(advices);
         aspectDefinition.setSortOrder(order);
+
         return aspectDefinition;
     }
 
-    // 扫描包下的所有类
+    // 扫描包下的所有类（支持多模块 classpath 与 JAR：使用 getResources 扫描所有 classpath 根）
     private Set<Class<?>> scanClasses(String basePackage) {
         Set<Class<?>> classes = new HashSet<>();
+        String path = basePackage.replace('.', '/');
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         try {
-            String path = basePackage.replace('.', '/');
-            URL resource = Thread.currentThread().getContextClassLoader().getResource(path);
-            if (resource != null) {
-                File directory = new File(resource.getFile());
-                if (directory.exists()) {
-                    scanDirectory(directory, basePackage, classes);
+            Enumeration<URL> resources = classLoader.getResources(path);
+            while (resources.hasMoreElements()) {
+                URL resource = resources.nextElement();
+                if ("file".equals(resource.getProtocol())) {
+                    File directory = new File(resource.getFile());
+                    if (directory.exists()) {
+                        scanDirectory(directory, basePackage, classes);
+                    }
+                } else if ("jar".equals(resource.getProtocol())) {
+                    scanJar(resource, path, basePackage, classes, classLoader);
                 }
             }
         } catch (Exception e) {
             throw new RuntimeException("扫描包失败: " + basePackage, e);
         }
         return classes;
+    }
+
+    // 扫描 JAR 中指定包下的 .class
+    private void scanJar(URL jarUrl, String path, String basePackage, Set<Class<?>> classes, ClassLoader classLoader) {
+        try (JarFile jarFile = ((JarURLConnection) jarUrl.openConnection()).getJarFile()) {
+            String prefix = path.endsWith("/") ? path : path + "/";
+            Stream<JarEntry> entries = jarFile.stream();
+            entries.filter(e -> !e.isDirectory() && e.getName().startsWith(prefix) && e.getName().endsWith(".class"))
+                    .forEach(e -> {
+                        String name = e.getName().replace('/', '.').substring(0, e.getName().length() - 6);
+                        try {
+                            classes.add(Class.forName(name, false, classLoader));
+                        } catch (ClassNotFoundException ignored) {
+                        }
+                    });
+        } catch (Exception e) {
+            // 单个 JAR 扫描失败不中断整体
+        }
     }
 
     // 递归扫描目录

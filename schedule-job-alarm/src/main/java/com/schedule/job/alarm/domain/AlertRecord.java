@@ -4,6 +4,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 告警记录领域对象
+ */
 @Data
 public class AlertRecord {
     private Long id;

@@ -4,6 +4,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 告警配置领域对象
+ */
 @Data
 public class AlertConfig {
     private Long id;

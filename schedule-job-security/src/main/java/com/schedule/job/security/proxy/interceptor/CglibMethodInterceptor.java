@@ -25,7 +25,7 @@ public class CglibMethodInterceptor implements MethodInterceptor {
 
     @Override
     public Object intercept(Object obj, Method method, Object[] args, MethodProxy proxy) throws Throwable {
-        // 1. 如果没有切面，直接执行目标方法
+        // 1. 如果没有切面，直接执行目标方法（proxy 已在创建时复制了 target 的注入字段，故 invokeSuper 可用）
         if (aspectDefinitions == null || aspectDefinitions.isEmpty()) {
             return proxy.invokeSuper(obj, args);
         }
@@ -35,7 +35,7 @@ public class CglibMethodInterceptor implements MethodInterceptor {
             return proxy.invokeSuper(obj, args);
         }
         
-        // 3. 创建连接点
+        // 3. 创建连接点（使用 CGLIB 特定的实现）
         ProceedingJoinPoint proceedingJoinPoint = new CglibProceedingJoinPoint(target, method, args, proxy, obj);
         
         // 4. 执行 Before 通知
@@ -104,6 +104,7 @@ public class CglibMethodInterceptor implements MethodInterceptor {
 
     private Object executeAroundRecursive(List<AdviceDefinition> advices, int index, ProceedingJoinPoint originalJoinPoint, List<AspectDefinition> aspects) throws Throwable {
         // 如果所有 Around 通知都执行完了，调用原始 JoinPoint 的 proceed() 方法
+        // 这会使用 CGLIB 的 proxy.invokeSuper(obj, args) 执行目标方法
         if (index >= advices.size()) {
             return originalJoinPoint.proceed();
         }
@@ -134,6 +135,7 @@ public class CglibMethodInterceptor implements MethodInterceptor {
             @Override
             public Object proceed(Object[] args) throws Throwable {
                 // 如果传入了新参数，需要创建一个新的 CglibProceedingJoinPoint
+                // 因为 CGLIB 的 invokeSuper 需要使用正确的参数
                 if (originalJoinPoint instanceof CglibProceedingJoinPoint) {
                     CglibProceedingJoinPoint cglibJoinPoint = (CglibProceedingJoinPoint) originalJoinPoint;
                     // 创建新的 JoinPoint 使用新参数，确保使用 CGLIB 的 invokeSuper

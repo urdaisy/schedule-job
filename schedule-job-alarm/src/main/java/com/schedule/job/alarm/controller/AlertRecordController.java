@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * 告警记录管理Controller
+ */
 @RestController
 @RequestMapping("/api/alert/record")
 public class AlertRecordController {

@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * 告警配置管理API
+ * 告警配置管理Controller
  */
 @RestController
 @RequestMapping("/api/alert/config")

@@ -8,6 +8,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 告警配置实体
+ */
 @Data
 @Entity(name = "sys_job_alert_config", uniqueConstraints = {
     @UniqueConstraint(columnNames = {"job_id", "alert_type"})

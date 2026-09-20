@@ -39,7 +39,7 @@ public class AlertService {
     private JobInfoProvider jobInfoProvider;
     
     /**
-     * 触发任务失败告警
+     * 触发任务失败告警，异步任务触发告警
      * 
      * @param jobId 任务ID
      * @param jobLogId 任务日志ID
@@ -98,11 +98,13 @@ public class AlertService {
                             ALERT_STATUS_FAILED, 
                             "不支持的告警类型: " + config.getAlertType()
                     );
+                    throw new IllegalArgumentException("不支持的告警类型: " + config.getAlertType());
                 }
             }
             
         } catch (Exception e) {
             log.error("触发告警失败，jobId: {}, jobLogId: {}", jobId, jobLogId, e);
+            throw new IllegalStateException("触发告警失败", e);
         }
     }
     
@@ -132,6 +134,7 @@ public class AlertService {
                         "邮件发送失败"
                 );
                 log.error("邮件告警发送失败，jobId: {}, receiver: {}", alertRecord.getJobId(), config.getReceiverEmail());
+                throw new IllegalStateException("邮件告警发送失败，jobId=" + alertRecord.getJobId());
             }
             
         } catch (Exception e) {
@@ -141,6 +144,7 @@ public class AlertService {
                     ALERT_STATUS_FAILED, 
                     "发送异常: " + e.getMessage()
             );
+            throw new IllegalStateException("发送邮件告警异常，jobId=" + alertRecord.getJobId(), e);
         }
     }
     

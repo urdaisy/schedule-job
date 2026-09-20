@@ -1,8 +1,10 @@
 package com.schedule.job.admin.config;
 
 import com.schedule.job.admin.entity.JobInfoEntity;
+import com.schedule.job.admin.job.JobInfo;
 import com.schedule.job.admin.repository.JobInfoRepository;
 import com.schedule.job.alarm.domain.JobInfoProvider;
+import com.schedule.job.common.infra.orm.Entity;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

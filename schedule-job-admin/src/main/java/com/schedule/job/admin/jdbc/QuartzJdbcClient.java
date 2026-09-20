@@ -11,16 +11,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Quartz专用连接池
+ * Quartz专用连接池（独立于业务连接池）
  * 避免Quartz和业务代码相互影响
  */
 @Slf4j
 public class QuartzJdbcClient {
+    // 活跃连接数
     private static AtomicInteger atomicInteger = new AtomicInteger(0);
+    // 连接队列（存储空闲连接）
     private static ConcurrentLinkedQueue<Connection> idleConnectionQueue = new ConcurrentLinkedQueue<>();
-    private final static int MAX_POOL_SIZE = 10;
-    private final static int MIN_IDLE = 2;
-    private final static long MAX_WAIT = 10000;
+    // Quartz连接池配置（独立配置，避免与业务连接池冲突）
+    private final static int MAX_POOL_SIZE = 10;  // Quartz专用连接池，5个连接足够
+    private final static int MIN_IDLE = 2;        // 最小空闲连接
+    private final static long MAX_WAIT = 10000;   // 等待时间10秒
+    // 锁
     private final static ReentrantLock lock = new ReentrantLock();
 
     static {

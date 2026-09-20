@@ -132,6 +132,9 @@ INSERT INTO sys_job_permission(permission_name, permission_code, resource, actio
 INSERT INTO sys_job_permission(permission_name, permission_code, resource, action) values ('定时任务Delete', '003', 'job', 'delete');
 INSERT INTO sys_job_permission(permission_name, permission_code, resource, action) values ('任务日志Query', '004', 'log', 'query');
 INSERT INTO sys_job_permission(permission_name, permission_code, resource, action) values ('任务日志Delete', '005', 'log', 'delete');
+INSERT INTO sys_job_permission(permission_name, permission_code, resource, action) values ('用户管理Query', '006', 'user', 'query');
+INSERT INTO sys_job_permission(permission_name, permission_code, resource, action) values ('定时任务Execute', '007', 'job', 'execute');
+
 -- 数据库操作：管理员支持对job进行CRUD，普通用户只能CRU不支持删除操作 --
 INSERT INTO sys_job_role_permission(role_id, permission_id) values (1, 1);
 INSERT INTO sys_job_role_permission(role_id, permission_id) values (1, 2);
@@ -141,3 +144,5 @@ INSERT INTO sys_job_role_permission(role_id, permission_id) values (1, 5);
 INSERT INTO sys_job_role_permission(role_id, permission_id) values (1, 6);
 INSERT INTO sys_job_role_permission(role_id, permission_id) values (2, 2);
 INSERT INTO sys_job_role_permission(role_id, permission_id) values (2, 3);
+INSERT INTO sys_job_role_permission(role_id, permission_id) values (1, 9);
+INSERT INTO sys_job_role_permission(role_id, permission_id) values (1, 10);
